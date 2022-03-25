@@ -1,0 +1,26 @@
+[package]
+name = "rust_cli_music_player"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+soloud = "*"
+anyhow = "*"
+log = "*"
+fern = "*"
+colored = "*"
+basic_quick_lib = "*"
+serde_json = "*"
+chrono = "*"
+clearscreen = "*"
+once_cell = "*"
+
+	[dependencies.clap]
+	version = "*"
+	features = ["derive"]
+
+	[dependencies.serde]
+	version = "*"
+	features = ["derive"]
