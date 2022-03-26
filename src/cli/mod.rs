@@ -1,8 +1,9 @@
-use self::{add::Add, play::Play};
+use self::{add::Add, play::Play, settings::ChangeSettings};
 
 mod add;
 pub mod data;
 mod play;
+mod settings;
 
 #[derive(clap::Parser)]
 #[clap(
@@ -21,6 +22,7 @@ impl Cli {
     match &mut self.commands {
       Subcommands::Play(play) => play.handle(),
       Subcommands::Add(add) => add.handle(),
+      Subcommands::Setting(change_settings) => change_settings.handle(),
     }
   }
 }
@@ -29,4 +31,5 @@ impl Cli {
 enum Subcommands {
   Play(Play),
   Add(Add),
+  Setting(ChangeSettings),
 }

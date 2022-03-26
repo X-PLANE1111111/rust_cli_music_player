@@ -1,7 +1,15 @@
-use std::{cell::Cell, process, sync::mpsc, thread, time::Duration};
+use std::{
+  cell::Cell,
+  num::NonZeroI32,
+  process,
+  sync::{mpsc, PoisonError},
+  thread,
+  time::Duration,
+};
 
 use anyhow::Context;
 use basic_quick_lib::{cli_util::pause, io_util::input_trim};
+use colored::Colorize;
 use log::{error, info, warn};
 use soloud::{AudioExt, LoadExt, Soloud, Wav};
 
@@ -44,6 +52,8 @@ impl Play {
 
     let (sender, receiver) = mpsc::channel::<Message>();
 
+    let songs_len = songs.len();
+
     thread::spawn(move || {
       let mut sl = Soloud::default()
         .with_context(|| "Failed to get player!")
@@ -51,14 +61,21 @@ impl Play {
 
       let mut wav = Wav::default();
 
-      let mut currently_playing = 0;
+      let volume = SETTINGS
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .volume;
 
-      loop {
+      sl.set_global_volume(volume as f32 / 100.0);
+
+      let currently_playing = Cell::new(0);
+
+      'song_loop: loop {
         let Song {
           song_name,
           path_to_song,
           author,
-        } = &songs[currently_playing];
+        } = &songs[currently_playing.get()];
 
         let mut current_duration = Duration::ZERO;
         // use a cell here because we want the `print_info` closure
@@ -81,8 +98,18 @@ impl Play {
 
           println!();
 
-          info!("Currently playing \"{}\"", song_name);
-          info!("Made by \"{}\"", author);
+          // info!("Currently playing \"{}\"", song_name);
+          // info!("Made by \"{}\"", author);
+
+          for (index, song) in songs.iter().enumerate() {
+            let is_bold = index == currently_playing.get();
+
+            if is_bold {
+              info!("{}", format!("{}. {}", index + 1, song.song_name).bold())
+            } else {
+              info!("{}", format!("{}. {}", index + 1, song.song_name))
+            }
+          }
 
           if is_paused.get() {
             info!("Paused");
@@ -105,11 +132,12 @@ impl Play {
 
         const SLEEP_DURATION: Duration = Duration::from_millis(10);
 
+        // while the song is playing
         while sl.voice_count() > 0 {
           // pause the loop a little so it won't take too much cpu power
           thread::sleep(SLEEP_DURATION);
 
-          if is_paused.get() {
+          if !is_paused.get() {
             current_duration += SLEEP_DURATION;
           }
 
@@ -131,28 +159,38 @@ impl Play {
               }
               // do nothing because it will reprint anyways lol it feels stupid
               Reprint => {}
+              IndexJump(index) => {
+                currently_playing.set(index);
+                continue 'song_loop;
+              }
             }
 
             print_info();
           }
         }
 
-        match SETTINGS.playback_mode {
+        let setting = SETTINGS.lock().unwrap_or_else(PoisonError::into_inner);
+
+        // after the song been played, change the current playing song
+        // based on the playback mode choice
+        match setting.playback_mode {
           PlaybackMode::Sequel => {
-            currently_playing += 1;
-            if currently_playing >= songs.len() {
+            currently_playing.set(currently_playing.get() + 1);
+            if currently_playing.get() >= songs.len() {
               break;
             }
           }
           PlaybackMode::LoopOnce => {}
           PlaybackMode::LoopPlaylist => {
-            currently_playing += 1;
-            if currently_playing >= songs.len() {
-              currently_playing = 0;
+            currently_playing.set(currently_playing.get() + 1);
+            if currently_playing.get() >= songs.len() {
+              currently_playing.set(0);
             }
           }
           PlaybackMode::Random => {}
         }
+
+        drop(setting);
       }
 
       process::exit(0);
@@ -177,6 +215,8 @@ impl Play {
           info!(
             "pr       --- pause the music if it is playing otherwise resume"
           );
+          info!("Type the index of the song to jump to the song. Example: `4` will jump to the fourth one");
+          info!("    - Note that you can pass a negative value to start from the back. Example `-1` will go to the last song");
           pause();
           try_send(Reprint);
         }
@@ -188,6 +228,31 @@ impl Play {
         }
         "pr" => {
           try_send(PauseOrResume);
+        }
+        num if num.parse::<i32>().is_ok() => {
+          // a really dumb thing to do and hopefully
+          // if let guard can be stabilized in the future
+          let num = num.parse::<i32>().unwrap();
+
+          let index = match num {
+            0 => {
+              warn!("Index cannot be 0!");
+              pause();
+              try_send(Reprint);
+              continue;
+            }
+            1..=i32::MAX => num - 1,
+            i32::MIN..=-1 => songs_len as i32 + num,
+          };
+
+          if index.is_negative() || index >= songs_len as i32 {
+            warn!("Invalid index!");
+            pause();
+            try_send(Reprint);
+            continue;
+          }
+
+          try_send(IndexJump(index as usize));
         }
         _ => {
           warn!(
@@ -207,6 +272,7 @@ enum Message {
   Resume,
   PauseOrResume,
   Reprint,
+  IndexJump(usize),
 }
 
 #[cfg(test)]
