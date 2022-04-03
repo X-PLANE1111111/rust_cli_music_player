@@ -34,7 +34,7 @@ impl FromStr for PlaybackMode {
       "sequel" => Ok(Self::Sequel),
       "looponce" => Ok(Self::LoopOnce),
       "loopplaylist" => Ok(Self::LoopPlaylist),
-      "random" => Ok(Self::LoopPlaylist),
+      "random" => Ok(Self::Random),
       _ => Err(anyhow!("Unknown playback mode!")),
     }
   }

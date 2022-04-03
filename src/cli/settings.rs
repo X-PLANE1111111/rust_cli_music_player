@@ -24,7 +24,7 @@ pub struct ChangeSettings {
   #[clap(short, long)]
   show_settings: bool,
 
-  ///
+  /// The global volume for the musics (Note it is different from your computer's volume)
   #[clap(short, long)]
   volume: Option<u8>,
 }

@@ -505,7 +505,7 @@ dependencies = [
 
 [[package]]
 name = "rust_cli_music_player"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "basic_quick_lib",
@@ -516,9 +516,11 @@ dependencies = [
  "fern",
  "log",
  "once_cell",
+ "rand",
  "serde",
  "serde_json",
  "soloud",
+ "thiserror",
 ]
 
 [[package]]
