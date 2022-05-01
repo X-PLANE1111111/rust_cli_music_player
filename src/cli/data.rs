@@ -24,12 +24,10 @@ pub struct Song {
 impl PlaylistInfo {
   pub fn load(playlist_name: &str) -> anyhow::Result<Self> {
     let path = playlist_info_path(playlist_name);
-
     let data = fs::read_to_string(path)?;
-
     let mut this: PlaylistInfo = serde_json::from_str(&data)?;
-
     this.folder_name = playlist_name.to_string();
+
     Ok(this)
   }
 

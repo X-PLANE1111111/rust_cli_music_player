@@ -1,12 +1,13 @@
-use std::{fs, str::FromStr, sync::Mutex};
+use std::{fmt::Display, fs, str::FromStr};
 
 use anyhow::anyhow;
 use basic_quick_lib::home_dir::home_dir;
 use once_cell::sync::Lazy;
+use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 
-pub static SETTINGS: Lazy<Mutex<Settings>> =
-  Lazy::new(|| Mutex::new(Settings::read_settings().unwrap_or_default()));
+pub static SETTINGS: Lazy<RwLock<Settings>> =
+  Lazy::new(|| RwLock::new(Settings::read_settings().unwrap_or_default()));
 
 const SETTINGS_FILE: &str = "rust-cli-music-player_settings.json";
 
@@ -40,15 +41,17 @@ impl FromStr for PlaybackMode {
   }
 }
 
-impl ToString for PlaybackMode {
-  fn to_string(&self) -> String {
-    match self {
+impl Display for PlaybackMode {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    let playback_mode = match self {
       Self::Sequel => "Sequel",
       Self::LoopOnce => "Loop Once",
       Self::LoopPlaylist => "Loop Playlist",
       Self::Random => "Random",
     }
-    .to_string()
+    .to_string();
+
+    write!(f, "{}", playback_mode)
   }
 }
 

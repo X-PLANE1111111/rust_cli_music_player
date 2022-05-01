@@ -5,9 +5,11 @@ use basic_quick_lib::home_dir::home_dir;
 
 use crate::cli::data::Song;
 
-const FAILED_TO_DOWNLOAD_HELP_MESSAGE: &str = r#"Something went wrong while downloading. It may because of youtube-dl isn't installed. 
+const FAILED_TO_DOWNLOAD_HELP_MESSAGE: &str = r#"
+Something went wrong while downloading. It may because of youtube-dl isn't installed. 
 Please install it and add it to environment variable.
-Go to http://ytdl-org.github.io/youtube-dl/download.html to install youtube-dl"#;
+Go to http://ytdl-org.github.io/youtube-dl/download.html to install youtube-dl.
+"#;
 
 const DOWNLOADS_FOLDER: &str = "rust-cli-music-player_downloaded-audios";
 

@@ -1,7 +1,8 @@
 use std::{
   cell::Cell,
   process,
-  sync::{mpsc, PoisonError},
+  str::FromStr,
+  sync::{mpsc, Arc, Mutex, PoisonError},
   thread,
   time::Duration,
 };
@@ -74,26 +75,60 @@ impl Play {
         return;
       }
     };
-    self.play(playlist_info);
+    let mut menu = PlayMenu::new(playlist_info);
+    menu.start();
+  }
+}
+
+enum Message {
+  Pause,
+  Resume,
+  PauseOrResume,
+  Reprint,
+  IndexJump(usize),
+  SetVolume(u8),
+}
+
+struct PlayMenu {
+  commands_sender: mpsc::Sender<Message>,
+  commands_receiver: Arc<Mutex<mpsc::Receiver<Message>>>,
+  playlist_info: Arc<PlaylistInfo>,
+}
+
+impl PlayMenu {
+  fn new(playlist_info: PlaylistInfo) -> Self {
+    let channel = mpsc::channel::<Message>();
+
+    Self {
+      commands_sender: channel.0,
+      commands_receiver: Arc::new(Mutex::new(channel.1)),
+      playlist_info: Arc::new(playlist_info),
+    }
   }
 
-  fn play(&self, playlist_info: PlaylistInfo) {
+  fn start(&mut self) {
+    self.handle_play();
+    self.handle_input();
+  }
+
+  fn handle_play(&self) {
     use Message::*;
 
-    let PlaylistInfo {
-      name,
-      songs,
-      // created,
-      ..
-    } = playlist_info;
-
-    let (sender, receiver) = mpsc::channel::<Message>();
-
-    let songs_len = songs.len();
+    let playlist_info = Arc::clone(&self.playlist_info);
+    let receiver = Arc::clone(&self.commands_receiver);
 
     thread::spawn(move || {
+      let PlaylistInfo {
+        name,
+        songs,
+        // created,
+        ..
+      } = playlist_info.as_ref();
+
+      let songs_len = songs.len();
+
       if songs_len == 0 {
-        warn!("The playlist is empty! Use command `add <LINK> <PLAYLIST_NAME>` to add songs into playlist!");
+        warn!("The playlist is empty! Use command `add <YOUTUBE_VIDEO_LINK> <PLAYLIST_NAME>` to add songs into playlist!");
         pause();
         process::exit(1);
       }
@@ -104,10 +139,7 @@ impl Play {
 
       let mut wav = Wav::default();
 
-      let volume = SETTINGS
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
-        .volume;
+      let volume = SETTINGS.read().volume;
 
       sl.set_global_volume(volume as f32 / 100.0);
 
@@ -115,16 +147,12 @@ impl Play {
       shuffle_vec(&mut randomized_indexes, songs_len);
 
       let currently_playing = {
-        let starting_index = if SETTINGS
-          .lock()
-          .unwrap_or_else(PoisonError::into_inner)
-          .playback_mode
-          == PlaybackMode::Random
-        {
-          randomized_indexes.pop().unwrap()
-        } else {
-          0
-        };
+        let starting_index =
+          if SETTINGS.read().playback_mode == PlaybackMode::Random {
+            randomized_indexes.pop().unwrap()
+          } else {
+            0
+          };
 
         Cell::new(starting_index)
       };
@@ -191,15 +219,21 @@ impl Play {
 
         // while the song is playing
         while sl.voice_count() > 0 {
-          // pause the loop a little so it won't take too much cpu power
+          // pause the loop a little so it won't take too much cpu
+          // power
           thread::sleep(SLEEP_DURATION);
 
           if !is_paused.get() {
             current_duration += SLEEP_DURATION;
           }
 
-          // try to recv to see if there is any command, or else continue playing the song
-          if let Ok(message) = receiver.try_recv() {
+          // try to recv to see if there is any command, or else
+          // continue playing the song
+          if let Ok(message) = receiver
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .try_recv()
+          {
             match message {
               Pause => {
                 is_paused.set(true);
@@ -210,11 +244,11 @@ impl Play {
                 sl.set_pause(handle, is_paused.get());
               }
               PauseOrResume => {
-                // inverse bool but I'm too lazy
                 is_paused.set(!is_paused.get());
                 sl.set_pause(handle, is_paused.get());
               }
-              // do nothing because it will reprint anyways lol it feels stupid
+              // do nothing because it will reprint anyways lol it
+              // feels stupid
               Reprint => {}
               IndexJump(index) => {
                 currently_playing.set(index);
@@ -222,8 +256,7 @@ impl Play {
               }
               SetVolume(new_volume) => {
                 sl.set_global_volume(new_volume as f32 / 100.0);
-                let mut setting =
-                  SETTINGS.lock().unwrap_or_else(PoisonError::into_inner);
+                let mut setting = SETTINGS.write();
                 setting.volume = new_volume;
                 let _ = setting.save();
               }
@@ -233,7 +266,7 @@ impl Play {
           }
         }
 
-        let setting = SETTINGS.lock().unwrap_or_else(PoisonError::into_inner);
+        let setting = SETTINGS.read();
 
         // after the song been played, change the current playing song
         // based on the playback mode choice
@@ -255,8 +288,9 @@ impl Play {
             randomized_indexes.pop().unwrap_or_else(|| {
               shuffle_vec(&mut randomized_indexes, songs_len);
 
-              // should not panic because if the playlist is empty then
-              // it will be check and will exit the process if so
+              // should not panic because if the playlist is empty
+              // then it will be check
+              // and will exit the process if so
               randomized_indexes.pop().unwrap()
             }),
           ),
@@ -265,9 +299,33 @@ impl Play {
 
       process::exit(0);
     });
+  }
+
+  fn help_menu() {
+    option_print("exit", "exit the program");
+    option_print("help", "open help message");
+    option_print("pause", "pause the music");
+    option_print("resume", "resume the music");
+    option_print("pr", "pause the music if it is playing otherwise resume");
+    option_print("setv <VOLUME>", "set the volume. anything that is not in between 0 and 100 will be invalid");
+    option_print("getv", "get the current volume");
+    option_print(
+            "setp <PLAYBACK_MODE>",
+            "Set the playback mode. Value can be: random, looponce, loopplaylist, sequel (Note: it is not case sensitive)",
+          );
+    option_print("getp", "Get the current playback mode");
+    info!("Type the index of the song to jump to the song. Example: `4` will jump to the fourth one");
+    info!("    - Note that you can pass a negative value to start from the back. Example `-1` will go to the last song");
+  }
+
+  fn handle_input(&self) {
+    use Message::*;
+
+    let songs = Arc::clone(&self.playlist_info);
+    let song_len = songs.songs.len();
 
     let try_send = |message: Message| {
-      sender.send(message).unwrap_or_else(|err| {
+      self.commands_sender.send(message).unwrap_or_else(|err| {
 				error!("Something went wrong while sending the command to the music playing thread! This command will not do anything! Error: {}", err);
 			});
     };
@@ -281,13 +339,12 @@ impl Play {
         continue;
       }
 
-      let splitted = input.split(' ').collect::<Vec<_>>();
+      let splitted = input.split(' ').collect::<Vec<&str>>();
 
-      let command = &splitted[0];
+      let command = splitted[0];
       let args = &splitted[1..];
 
-      match *command {
-        "exit" => return,
+      match command {
         "setv" => {
           if args.is_empty() {
             warn!("usage: setv <VOLUME>");
@@ -304,44 +361,65 @@ impl Play {
             }
           };
 
-          if !(0..=100).contains(&volume) {
-            warn!("Volume must be inbetween 0 and 100!");
+          if volume > 100 {
+            warn!("Volume must be in between 0 and 100!");
             pause();
             continue;
           }
 
           try_send(SetVolume(volume as u8));
         }
+        "getv" => {
+          info!("{}", SETTINGS.read().volume);
+          pause();
+        }
         "help" => {
-          option_print("exit", "exit the program");
-          option_print("help", "open help message");
-          option_print("pause", "pause the music");
-          option_print("resume", "resume the music");
-          option_print(
-            "pr",
-            "pause the music if it is playing otherwise resume",
-          );
-          option_print("setv <VOLUME>", "set the volume. anything that is not inbetween 0 and 100 will be invalid");
-          info!("Type the index of the song to jump to the song. Example: `4` will jump to the fourth one");
-          info!("    - Note that you can pass a negative value to start from the back. Example `-1` will go to the last song");
+          Self::help_menu();
           pause();
           try_send(Reprint);
         }
-        "pause" => {
-          try_send(Pause);
+        "pause" => try_send(Pause),
+        "resume" => try_send(Resume),
+        "pr" => try_send(PauseOrResume),
+        "setp" => {
+          if args.is_empty() {
+            warn!("Playback mode can be: random, looponce, loopplaylist, sequel (It is not case sensitive)");
+            pause();
+            continue;
+          }
+
+          let playback_mode = match PlaybackMode::from_str(args[0]) {
+            Ok(v) => v,
+            Err(_) => {
+              warn!("Invalid playback mode! Valid ones are: random, looponce, loopplaylist, sequel");
+              pause();
+              continue;
+            }
+          };
+
+          let mut settings = SETTINGS.write();
+          settings.playback_mode = playback_mode;
+          settings.save().unwrap_or_else(|err| {
+						warn!("Failed to save the settings! This means the playback mode did not change and it will be lost next time you open this program! (Error: {})", err);
+						pause();
+					});
+
+          info!(
+            "Successfully set playback mode to {}!",
+            settings.playback_mode
+          );
+          pause();
         }
-        "resume" => {
-          try_send(Resume);
-        }
-        "pr" => {
-          try_send(PauseOrResume);
+        "getp" => {
+          info!("{}", SETTINGS.read().playback_mode);
+          pause();
         }
         num if num.parse::<i32>().is_ok() => {
           // a really dumb thing to do and hopefully
           // if let guard can be stabilized in the future
           let num = num.parse::<i32>().unwrap();
 
-          let index = match get_index(num, songs_len) {
+          let index = match get_index(num, song_len) {
             Ok(index) => index,
             Err(e) => {
               error!("{}", e);
@@ -353,6 +431,7 @@ impl Play {
 
           try_send(IndexJump(index));
         }
+        "exit" => return,
         _ => {
           warn!(
             "Unknown Command `{}`! Type in `help` for more information!",
@@ -363,15 +442,6 @@ impl Play {
       }
     }
   }
-}
-
-enum Message {
-  Pause,
-  Resume,
-  PauseOrResume,
-  Reprint,
-  IndexJump(usize),
-  SetVolume(u8),
 }
 
 #[cfg(test)]

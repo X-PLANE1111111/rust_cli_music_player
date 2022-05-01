@@ -1,5 +1,3 @@
-use std::sync::PoisonError;
-
 use clap::Args;
 use log::{error, info};
 
@@ -24,7 +22,8 @@ pub struct ChangeSettings {
   #[clap(short, long)]
   show_settings: bool,
 
-  /// The global volume for the musics (Note it is different from your computer's volume)
+  /// The global volume for the musics (Note it is different from your
+  /// computer's volume)
   #[clap(short, long)]
   volume: Option<u8>,
 }
@@ -32,7 +31,7 @@ pub struct ChangeSettings {
 impl ChangeSettings {
   pub fn handle(&mut self) {
     let mut is_settings_changed = false;
-    let mut settings = SETTINGS.lock().unwrap_or_else(PoisonError::into_inner);
+    let mut settings = SETTINGS.write();
 
     if let Some(playback_mode) = self.playback_mode {
       settings.playback_mode = playback_mode;
