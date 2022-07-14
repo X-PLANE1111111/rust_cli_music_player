@@ -1,6 +1,8 @@
-use std::{fs, path::PathBuf};
+use std::{fs, path::PathBuf, process};
 
-use basic_quick_lib::time::LocalTime;
+use basic_quick_lib::{io_util::input_trim, time::LocalTime};
+use chrono::Local;
+use log::{error, info};
 use serde::{Deserialize, Serialize};
 
 use crate::util::playlist_info_path;
@@ -32,7 +34,7 @@ pub struct Song {
     pub path_to_song: PathBuf,
 
     #[serde(default)]
-    pub author: String,
+    pub author: Option<String>,
 
     #[serde(default = "default_sound_multiplier")]
     pub sound_multiplier: f32,
@@ -57,6 +59,47 @@ impl PlaylistInfo {
         fs::create_dir_all(&path).unwrap();
         fs::write(&info_path, json_string).unwrap();
     }
+
+    pub fn load_or_create(playlist_name: &str) -> Self {
+        match PlaylistInfo::load(playlist_name) {
+            Ok(v) => v,
+            Err(err) => {
+                error!(
+                    "Failed to find playlist \"{}\"! Error: {}",
+                    playlist_name, err
+                );
+                info!("Do you want to create a playlist instead? (y/N): ");
+
+                let input = input_trim("");
+                if input.to_lowercase() == "y" {
+                    PlaylistInfo {
+                        folder_name: playlist_name.to_string(),
+                        name: playlist_name.to_string(),
+                        created: Some(LocalTime(Local::now())),
+                        ..Default::default()
+                    }
+                } else {
+                    process::exit(1);
+                }
+            }
+        }
+    }
+}
+
+impl Song {
+    pub fn new(
+        song_name: String,
+        path: PathBuf,
+        author: Option<String>,
+        sound_multiplier: f32,
+    ) -> Self {
+        Self {
+            song_name,
+            path_to_song: path,
+            author,
+            sound_multiplier,
+        }
+    }
 }
 
 #[cfg(test)]
@@ -75,7 +118,7 @@ mod test {
             songs: vec![Song {
                 song_name: "song1".to_string(),
                 path_to_song: PathBuf::from_iter([r"C:\", "test", "what"]),
-                author: "Lucas Fan".to_string(),
+                author: Some("Lucas Fan".to_string()),
                 sound_multiplier: 2.0,
             }],
             created: Some(LocalTime(Local::now())),
@@ -99,7 +142,7 @@ mod test {
             songs: vec![Song {
                 song_name: "song1".to_string(),
                 path_to_song: PathBuf::from_iter([r"C:\", "test", "what"]),
-                author: "Lucas Fan".to_string(),
+                author: Some("Lucas Fan".to_string()),
                 sound_multiplier: 2.0,
             }],
             created: Some(LocalTime(Local::now())),

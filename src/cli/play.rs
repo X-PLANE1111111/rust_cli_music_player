@@ -58,12 +58,12 @@ fn get_index(index: i32, vec_len: usize) -> Result<usize, GetIndexError> {
     Ok(vec_index as usize)
 }
 
-fn option_print(command: &str, help_msg: &str) {
+fn help_print(command: &str, help_msg: &str) {
     info!("{:<20} --- {}", command, help_msg);
 }
 
-fn volume_with_multiplier(volume: u8, mulitplier: f32) -> f32 {
-    (volume as f32 * mulitplier / 100.0).clamp(0.0, 1.0)
+fn multiplied_volume(volume: u8, multiplier: f32) -> f32 {
+    (volume as f32 * multiplier / 100.0).clamp(0.0, 1.0)
 }
 
 #[derive(clap::Args)]
@@ -217,7 +217,7 @@ impl PlayMenu {
                     } = &playlist_info.read().songs
                         [currently_playing.load(Ordering::SeqCst)];
 
-                    sl.set_global_volume(volume_with_multiplier(
+                    sl.set_global_volume(multiplied_volume(
                         SETTINGS.read().volume,
                         *sound_multiplier,
                     ));
@@ -228,9 +228,9 @@ impl PlayMenu {
                             song_name, e
                         );
                         info!(
-                        "The reason why it failed might be because {} does not exists or is an audio type that is not supported", 
-                        path_to_song.to_str().unwrap_or("Unknown Path")
-                    );
+                            "The reason why it failed might be because {} does not exists or is an audio type that is not supported", 
+                            path_to_song.to_str().unwrap_or("Unknown Path")
+                        );
                         pause();
                         continue;
                     };
@@ -289,7 +289,7 @@ impl PlayMenu {
                                     write_guard.save();
                                 };
 
-                                sl.set_global_volume(volume_with_multiplier(
+                                sl.set_global_volume(multiplied_volume(
                                     SETTINGS.read().volume,
                                     new_mul,
                                 ));
@@ -367,28 +367,28 @@ impl PlayMenu {
     }
 
     fn help_menu() {
-        option_print("exit", "exit the program");
-        option_print("help", "open help message");
-        option_print("pause", "pause the music");
-        option_print("resume", "resume the music");
-        option_print("pr", "pause the music if it is playing otherwise resume");
-        option_print(
+        help_print("exit", "exit the program");
+        help_print("help", "open help message");
+        help_print("pause", "pause the music");
+        help_print("resume", "resume the music");
+        help_print("pr", "pause the music if it is playing otherwise resume");
+        help_print(
             "setv <VOLUME>",
             "set the volume. anything that is not in between 0 and 100 will be invalid",
         );
-        option_print("getv", "get the current volume");
-        option_print(
+        help_print("getv", "get the current volume");
+        help_print(
             "setp <PLAYBACK_MODE>",
             "Set the playback mode. Value can be: random, looponce, loopplaylist, sequel (Note: it is not case sensitive)",
           );
-        option_print("getp", "Get the current playback mode");
-        option_print("setmp", "Set the current song's volume multiplier");
-        option_print("getmp", "Get the current song's volume multiplier");
-        option_print(
+        help_print("getp", "Get the current playback mode");
+        help_print("setmp", "Set the current song's volume multiplier");
+        help_print("getmp", "Get the current song's volume multiplier");
+        help_print(
             "p",
             "Play previous. Wrap around the playlist if there is no previous",
         );
-        option_print(
+        help_print(
             "n",
             "Play next. Wrap around the playlist if there is no next",
         );
