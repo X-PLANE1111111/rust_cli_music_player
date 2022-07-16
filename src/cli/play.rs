@@ -1,5 +1,6 @@
 use std::{
     cell::Cell,
+    os::windows::prelude::IntoRawSocket,
     process,
     str::FromStr,
     sync::{
@@ -194,17 +195,94 @@ impl PlayMenu {
         );
     }
 
+    fn handle_msg(
+        message: &Message,
+        sl: &mut Soloud,
+        is_paused: &Cell<bool>,
+        handle: Handle,
+        currently_playing: &AtomicUsize,
+        playlist_info: &mut PlaylistInfo,
+    ) -> SongInstruction {
+        use Message::*;
+
+        match *message {
+            Pause => {
+                is_paused.set(true);
+                sl.set_pause(handle, is_paused.get());
+            }
+            Resume => {
+                is_paused.set(false);
+                sl.set_pause(handle, is_paused.get());
+            }
+            PauseOrResume => {
+                is_paused.set(!is_paused.get());
+                sl.set_pause(handle, is_paused.get());
+            }
+            // do nothing because it will reprint anyways lol it
+            // feels stupid
+            Reprint => {}
+            IndexJump(index) => {
+                currently_playing.store(index, Ordering::SeqCst);
+                return SongInstruction::SkipLoop;
+            }
+            SetVolume(new_volume) => {
+                {
+                    let mut setting = SETTINGS.write();
+                    setting.volume = new_volume;
+                    setting.save().unwrap_or_default();
+                }
+
+                Self::update_volume(
+                    sl,
+                    handle,
+                    playlist_info,
+                    currently_playing.load(Ordering::SeqCst),
+                );
+            }
+            SetMultiplier(new_mul) => {
+                {
+                    playlist_info.songs[currently_playing.load(Ordering::SeqCst)]
+                        .sound_multiplier = new_mul;
+                    playlist_info.save();
+                };
+
+                Self::update_volume(
+                    sl,
+                    handle,
+                    playlist_info,
+                    currently_playing.load(Ordering::SeqCst),
+                );
+            }
+            PlayPrevious => {
+                if currently_playing.load(Ordering::SeqCst) == 0 {
+                    currently_playing.store(playlist_info.songs.len() - 1, Ordering::SeqCst);
+                } else {
+                    currently_playing.fetch_sub(1, Ordering::SeqCst);
+                }
+                return SongInstruction::SkipLoop;
+            }
+            PlayNext => {
+                if currently_playing.load(Ordering::SeqCst) == playlist_info.songs.len() - 1 {
+                    currently_playing.store(0, Ordering::SeqCst);
+                } else {
+                    currently_playing.fetch_add(1, Ordering::SeqCst);
+                }
+                return SongInstruction::SkipLoop;
+            }
+        }
+
+        SongInstruction::None
+    }
+
     fn recv_cmd(
         sl: &mut Soloud,
         handle: Handle,
         receiver: &mpsc::Receiver<Message>,
         is_paused: &Cell<bool>,
         current_duration: &mut Duration,
-        playlist_info: &mut PlaylistInfo,
+        playlist_info: &RwLock<PlaylistInfo>,
         currently_playing: &AtomicUsize,
     ) -> SongInstruction {
-        use Message::*;
-
         const SLEEP_DURATION: Duration = Duration::from_millis(10);
 
         while sl.voice_count() > 0 {
@@ -219,76 +297,21 @@ impl PlayMenu {
             // try to recv to see if there is any command, or else
             // continue playing the song
             if let Ok(message) = receiver.try_recv() {
-                match message {
-                    Pause => {
-                        is_paused.set(true);
-                        sl.set_pause(handle, is_paused.get());
-                    }
-                    Resume => {
-                        is_paused.set(false);
-                        sl.set_pause(handle, is_paused.get());
-                    }
-                    PauseOrResume => {
-                        is_paused.set(!is_paused.get());
-                        sl.set_pause(handle, is_paused.get());
-                    }
-                    // do nothing because it will reprint anyways lol it
-                    // feels stupid
-                    Reprint => {}
-                    IndexJump(index) => {
-                        currently_playing.store(index, Ordering::SeqCst);
-                        return SongInstruction::SkipLoop;
-                    }
-                    SetVolume(new_volume) => {
-                        {
-                            let mut setting = SETTINGS.write();
-                            setting.volume = new_volume;
-                            setting.save().unwrap_or_default();
-                        }
+                let instruction = Self::handle_msg(
+                    &message,
+                    sl,
+                    is_paused,
+                    handle,
+                    currently_playing,
+                    &mut playlist_info.write(),
+                );
 
-                        Self::update_volume(
-                            sl,
-                            handle,
-                            playlist_info,
-                            currently_playing.load(Ordering::SeqCst),
-                        );
-                    }
-                    SetMultiplier(new_mul) => {
-                        {
-                            playlist_info.songs[currently_playing.load(Ordering::SeqCst)]
-                                .sound_multiplier = new_mul;
-                            playlist_info.save();
-                        };
-
-                        Self::update_volume(
-                            sl,
-                            handle,
-                            playlist_info,
-                            currently_playing.load(Ordering::SeqCst),
-                        );
-                    }
-                    PlayPrevious => {
-                        if currently_playing.load(Ordering::SeqCst) == 0 {
-                            currently_playing
-                                .store(playlist_info.songs.len() - 1, Ordering::SeqCst);
-                        } else {
-                            currently_playing.fetch_sub(1, Ordering::SeqCst);
-                        }
-                        return SongInstruction::SkipLoop;
-                    }
-                    PlayNext => {
-                        if currently_playing.load(Ordering::SeqCst) == playlist_info.songs.len() - 1
-                        {
-                            currently_playing.store(0, Ordering::SeqCst);
-                        } else {
-                            currently_playing.fetch_add(1, Ordering::SeqCst);
-                        }
-                        return SongInstruction::SkipLoop;
-                    }
+                if instruction != SongInstruction::None {
+                    return instruction;
                 }
 
                 Self::print_info(
-                    playlist_info,
+                    &playlist_info.read(),
                     currently_playing.load(Ordering::SeqCst),
                     is_paused.get(),
                 );
@@ -369,7 +392,7 @@ impl PlayMenu {
                     &receiver.lock(),
                     &is_paused,
                     &mut current_duration,
-                    &mut playlist_info.write(),
+                    &playlist_info,
                     currently_playing.as_ref(),
                 );
 
@@ -383,6 +406,7 @@ impl PlayMenu {
 
                 // after the song been played, change the current playing song
                 // based on the playback mode choice
+                // TODO: Wrap this into a function
                 match setting.playback_mode {
                     PlaybackMode::Sequel => {
                         currently_playing.fetch_add(1, Ordering::SeqCst);
@@ -615,6 +639,7 @@ impl PlayMenu {
     }
 }
 
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum SongInstruction {
     None,
     SkipLoop,
