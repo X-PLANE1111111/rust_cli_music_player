@@ -1,18 +1,18 @@
 {
-  "name": "playlist-name",
-  "playlist": [
-    {
-      "song_name": "name",
-      "path_to_song": "path",
-      "author": "author",
-      "duration": 182
-    },
-    {
-      "song_name": "name",
-      "path_to_song": "path",
-      "author": "author",
-      "duration": 182
-    }
-  ],
-  "created": "date created"
+    "name": "playlist-name",
+    "playlist": [
+        {
+            "song_name": "name",
+            "path_to_song": "path",
+            "author": "author",
+            "duration": 182
+        },
+        {
+            "song_name": "name",
+            "path_to_song": "path",
+            "author": "author",
+            "duration": 182
+        }
+    ],
+    "created": "date created"
 }

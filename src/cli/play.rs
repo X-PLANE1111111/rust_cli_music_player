@@ -16,7 +16,7 @@ use colored::Colorize;
 use log::{error, info, warn};
 use parking_lot::{Mutex, RwLock};
 use rand::{prelude::SliceRandom, thread_rng};
-use soloud::{AudioExt, LoadExt, Soloud, Wav};
+use soloud::{AudioExt, Handle, LoadExt, Soloud, Wav};
 
 use crate::{
     cli::data::Song,
@@ -124,9 +124,181 @@ impl PlayMenu {
         self.handle_input();
     }
 
-    fn handle_play(&self) {
+    fn init_song(
+        playlist_info: &PlaylistInfo,
+        currently_playing: usize,
+        wav: &mut Wav,
+    ) -> Result<(), (String, String)> {
+        let Song {
+            song_name,
+            path_to_song,
+            ..
+        } = &playlist_info.songs[currently_playing];
+
+        wav.load(path_to_song)
+            .map_err(|e| (
+                format!("Failed to load song \"{}\"! Error: {}", song_name, e), 
+                format!(
+                    "The reason why it failed might be because {} does not exists or is an audio type that is not supported",
+                    path_to_song.to_str().unwrap_or("Unknown Path")
+                )
+            ))
+    }
+
+    fn print_info(playlist_info: &PlaylistInfo, current_index: usize, is_paused: bool) {
+        // just ignore it if failed to clear
+        let _ = clearscreen::clear();
+
+        info!("Playlist: {}", playlist_info.name);
+        info!(
+            "Created at {}",
+            playlist_info
+                .created
+                .as_ref()
+                .map(|v| v.to_date_string())
+                .unwrap_or_else(|| "Unknown".to_string())
+        );
+
+        println!();
+
+        for (index, song) in playlist_info.songs.iter().enumerate() {
+            let is_current = index == current_index;
+
+            let text = format!("{}. {}", index + 1, song.song_name);
+
+            if is_current {
+                info!("-> {}", text.bold())
+            } else {
+                info!("   {}", text)
+            }
+        }
+
+        if is_paused {
+            println!();
+            info!("Paused");
+        }
+    }
+
+    fn update_volume(
+        sl: &mut Soloud,
+        handle: Handle,
+        playlist_info: &PlaylistInfo,
+        currently_playing: usize,
+    ) {
+        sl.set_volume(
+            handle,
+            multiplied_volume(
+                SETTINGS.read().volume,
+                playlist_info.songs[currently_playing].sound_multiplier,
+            ),
+        );
+    }
+
+    fn recv_cmd(
+        sl: &mut Soloud,
+        handle: Handle,
+        receiver: &mpsc::Receiver<Message>,
+        is_paused: &Cell<bool>,
+        current_duration: &mut Duration,
+        playlist_info: &mut PlaylistInfo,
+        currently_playing: &AtomicUsize,
+    ) -> SongInstruction {
         use Message::*;
 
+        const SLEEP_DURATION: Duration = Duration::from_millis(10);
+
+        while sl.voice_count() > 0 {
+            // pause the loop a little so it won't take too much cpu
+            // power
+            thread::sleep(SLEEP_DURATION);
+
+            if !is_paused.get() {
+                *current_duration += SLEEP_DURATION;
+            }
+
+            // try to recv to see if there is any command, or else
+            // continue playing the song
+            if let Ok(message) = receiver.try_recv() {
+                match message {
+                    Pause => {
+                        is_paused.set(true);
+                        sl.set_pause(handle, is_paused.get());
+                    }
+                    Resume => {
+                        is_paused.set(false);
+                        sl.set_pause(handle, is_paused.get());
+                    }
+                    PauseOrResume => {
+                        is_paused.set(!is_paused.get());
+                        sl.set_pause(handle, is_paused.get());
+                    }
+                    // do nothing because it will reprint anyways lol it
+                    // feels stupid
+                    Reprint => {}
+                    IndexJump(index) => {
+                        currently_playing.store(index, Ordering::SeqCst);
+                        return SongInstruction::SkipLoop;
+                    }
+                    SetVolume(new_volume) => {
+                        {
+                            let mut setting = SETTINGS.write();
+                            setting.volume = new_volume;
+                            setting.save().unwrap_or_default();
+                        }
+
+                        Self::update_volume(
+                            sl,
+                            handle,
+                            playlist_info,
+                            currently_playing.load(Ordering::SeqCst),
+                        );
+                    }
+                    SetMultiplier(new_mul) => {
+                        {
+                            playlist_info.songs[currently_playing.load(Ordering::SeqCst)]
+                                .sound_multiplier = new_mul;
+                            playlist_info.save();
+                        };
+
+                        Self::update_volume(
+                            sl,
+                            handle,
+                            playlist_info,
+                            currently_playing.load(Ordering::SeqCst),
+                        );
+                    }
+                    PlayPrevious => {
+                        if currently_playing.load(Ordering::SeqCst) == 0 {
+                            currently_playing
+                                .store(playlist_info.songs.len() - 1, Ordering::SeqCst);
+                        } else {
+                            currently_playing.fetch_sub(1, Ordering::SeqCst);
+                        }
+                        return SongInstruction::SkipLoop;
+                    }
+                    PlayNext => {
+                        if currently_playing.load(Ordering::SeqCst) == playlist_info.songs.len() - 1
+                        {
+                            currently_playing.store(0, Ordering::SeqCst);
+                        } else {
+                            currently_playing.fetch_add(1, Ordering::SeqCst);
+                        }
+                        return SongInstruction::SkipLoop;
+                    }
+                }
+
+                Self::print_info(
+                    playlist_info,
+                    currently_playing.load(Ordering::SeqCst),
+                    is_paused.get(),
+                );
+            }
+        }
+
+        SongInstruction::None
+    }
+
+    fn handle_play(&self) {
         let playlist_info = Arc::clone(&self.playlist_info);
         let receiver = Arc::clone(&self.commands_receiver);
         let currently_playing = Arc::clone(&self.currently_playing_index);
@@ -146,17 +318,14 @@ impl PlayMenu {
 
             let mut wav = Wav::default();
 
-            sl.set_global_volume(SETTINGS.read().volume as f32 / 100.0);
-
             let mut randomized_indexes = Vec::new();
             shuffle_vec(&mut randomized_indexes, songs_len);
 
-            let currently_index =
-                if SETTINGS.read().playback_mode == PlaybackMode::Random {
-                    randomized_indexes.pop().unwrap()
-                } else {
-                    0
-                };
+            let currently_index = if SETTINGS.read().playback_mode == PlaybackMode::Random {
+                randomized_indexes.pop().unwrap()
+            } else {
+                0
+            };
 
             currently_playing.store(currently_index, Ordering::SeqCst);
 
@@ -168,165 +337,48 @@ impl PlayMenu {
                 // then cell is used instead
                 let is_paused = Cell::new(false);
 
-                let print_info = || {
-                    // just ignore it if failed to clear
-                    clearscreen::clear().unwrap_or_default();
+                Self::print_info(
+                    &playlist_info.read(),
+                    currently_playing.load(Ordering::SeqCst),
+                    is_paused.get(),
+                );
 
-                    info!("Playlist: {}", playlist_info.read().name);
-                    info!(
-                        "Created at {}",
-                        playlist_info
-                            .read()
-                            .created
-                            .as_ref()
-                            .map(|v| v.to_date_string())
-                            .unwrap_or_else(|| "Unknown".to_string())
-                    );
-
-                    println!();
-
-                    for (index, song) in
-                        playlist_info.read().songs.iter().enumerate()
-                    {
-                        let is_current =
-                            index == currently_playing.load(Ordering::SeqCst);
-
-                        let text = format!("{}. {}", index + 1, song.song_name);
-
-                        if is_current {
-                            info!("{}", text.bold())
-                        } else {
-                            info!("{}", text)
-                        }
-                    }
-
-                    if is_paused.get() {
-                        println!();
-                        info!("Paused");
-                    }
-                };
-
-                print_info();
-
-                {
-                    let Song {
-                        song_name,
-                        path_to_song,
-                        sound_multiplier,
-                        ..
-                    } = &playlist_info.read().songs
-                        [currently_playing.load(Ordering::SeqCst)];
-
-                    sl.set_global_volume(multiplied_volume(
-                        SETTINGS.read().volume,
-                        *sound_multiplier,
-                    ));
-
-                    if let Err(e) = wav.load(path_to_song) {
-                        error!(
-                            "Failed to load song \"{}\"! Error: {}",
-                            song_name, e
-                        );
-                        info!(
-                            "The reason why it failed might be because {} does not exists or is an audio type that is not supported", 
-                            path_to_song.to_str().unwrap_or("Unknown Path")
-                        );
-                        pause();
-                        continue;
-                    };
-                };
+                if let Err(e) = Self::init_song(
+                    &playlist_info.read(),
+                    currently_playing.load(Ordering::SeqCst),
+                    &mut wav,
+                ) {
+                    error!("{}", e.0);
+                    info!("{}", e.1);
+                    pause();
+                    continue;
+                }
 
                 let handle = sl.play(&wav);
 
-                const SLEEP_DURATION: Duration = Duration::from_millis(10);
+                Self::update_volume(
+                    &mut sl,
+                    handle,
+                    &playlist_info.read(),
+                    currently_playing.load(Ordering::SeqCst),
+                );
 
-                // while the song is playing
-                while sl.voice_count() > 0 {
-                    // pause the loop a little so it won't take too much cpu
-                    // power
-                    thread::sleep(SLEEP_DURATION);
+                let instruction = Self::recv_cmd(
+                    &mut sl,
+                    handle,
+                    &receiver.lock(),
+                    &is_paused,
+                    &mut current_duration,
+                    &mut playlist_info.write(),
+                    currently_playing.as_ref(),
+                );
 
-                    if !is_paused.get() {
-                        current_duration += SLEEP_DURATION;
-                    }
-
-                    // try to recv to see if there is any command, or else
-                    // continue playing the song
-                    if let Ok(message) = receiver.lock().try_recv() {
-                        match message {
-                            Pause => {
-                                is_paused.set(true);
-                                sl.set_pause(handle, is_paused.get());
-                            }
-                            Resume => {
-                                is_paused.set(false);
-                                sl.set_pause(handle, is_paused.get());
-                            }
-                            PauseOrResume => {
-                                is_paused.set(!is_paused.get());
-                                sl.set_pause(handle, is_paused.get());
-                            }
-                            // do nothing because it will reprint anyways lol it
-                            // feels stupid
-                            Reprint => {}
-                            IndexJump(index) => {
-                                currently_playing
-                                    .store(index, Ordering::SeqCst);
-                                continue 'song_loop;
-                            }
-                            SetVolume(new_volume) => {
-                                sl.set_global_volume(new_volume as f32 / 100.0);
-                                let mut setting = SETTINGS.write();
-                                setting.volume = new_volume;
-                                setting.save().unwrap_or_default();
-                            }
-                            SetMultiplier(new_mul) => {
-                                {
-                                    let mut write_guard = playlist_info.write();
-                                    write_guard.songs[currently_playing
-                                        .load(Ordering::SeqCst)]
-                                    .sound_multiplier = new_mul;
-                                    write_guard.save();
-                                };
-
-                                sl.set_global_volume(multiplied_volume(
-                                    SETTINGS.read().volume,
-                                    new_mul,
-                                ));
-                            }
-                            PlayPrevious => {
-                                if currently_playing.load(Ordering::SeqCst) == 0
-                                {
-                                    currently_playing.store(
-                                        playlist_info.read().songs.len() - 1,
-                                        Ordering::SeqCst,
-                                    );
-                                } else {
-                                    currently_playing
-                                        .fetch_sub(1, Ordering::SeqCst);
-                                }
-                                continue 'song_loop;
-                            }
-                            PlayNext => {
-                                if currently_playing.load(Ordering::SeqCst)
-                                    == playlist_info.read().songs.len() - 1
-                                {
-                                    currently_playing
-                                        .store(0, Ordering::SeqCst);
-                                } else {
-                                    currently_playing
-                                        .fetch_add(1, Ordering::SeqCst);
-                                }
-                                continue 'song_loop;
-                            }
-                        }
-
-                        print_info();
-                    }
+                match instruction {
+                    SongInstruction::None => {}
+                    SongInstruction::SkipLoop => continue 'song_loop,
                 }
 
                 let setting = SETTINGS.read();
-
                 let len = playlist_info.read().songs.len();
 
                 // after the song been played, change the current playing song
@@ -434,11 +486,7 @@ impl PlayMenu {
                     let volume = match args[0].trim().parse::<u64>() {
                         Ok(v) => v,
                         Err(err) => {
-                            warn!(
-                                "Failed to parse {}. Err: {}",
-                                args[0].trim(),
-                                err
-                            );
+                            warn!("Failed to parse {}. Err: {}", args[0].trim(), err);
                             pause();
                             continue;
                         }
@@ -526,9 +574,8 @@ impl PlayMenu {
                 "getmp" => {
                     info!(
                         "Volume multiplier for current song is {}",
-                        songs.read().songs
-                            [current_playing_index.load(Ordering::SeqCst)]
-                        .sound_multiplier
+                        songs.read().songs[current_playing_index.load(Ordering::SeqCst)]
+                            .sound_multiplier
                     );
                     pause();
                 }
@@ -566,6 +613,11 @@ impl PlayMenu {
             }
         }
     }
+}
+
+enum SongInstruction {
+    None,
+    SkipLoop,
 }
 
 #[cfg(test)]
