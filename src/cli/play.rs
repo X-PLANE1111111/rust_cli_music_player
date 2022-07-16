@@ -1,6 +1,5 @@
 use std::{
     cell::Cell,
-    os::windows::prelude::IntoRawSocket,
     process,
     str::FromStr,
     sync::{
@@ -321,6 +320,48 @@ impl PlayMenu {
         SongInstruction::None
     }
 
+    fn next_song(
+        playlist_info: &PlaylistInfo,
+        currently_playing: &AtomicUsize,
+        randomized_indices: &mut Vec<usize>,
+    ) {
+        let setting = SETTINGS.read();
+        let len = playlist_info.songs.len();
+
+        // after the song been played, change the current playing song
+        // based on the playback mode choice
+        // TODO: Wrap this into a function
+        match setting.playback_mode {
+            PlaybackMode::Sequel => {
+                currently_playing.fetch_add(1, Ordering::SeqCst);
+                if currently_playing.load(Ordering::SeqCst) >= len {
+                    process::exit(0);
+                }
+            }
+            PlaybackMode::LoopOnce => {}
+            PlaybackMode::LoopPlaylist => {
+                currently_playing.fetch_add(1, Ordering::SeqCst);
+
+                if currently_playing.load(Ordering::SeqCst) >= len {
+                    currently_playing.store(0, Ordering::SeqCst);
+                }
+            }
+            PlaybackMode::Random => {
+                currently_playing.store(
+                    randomized_indices.pop().unwrap_or_else(|| {
+                        shuffle_vec(randomized_indices, len);
+
+                        // should not panic because if the playlist is
+                        // empty then it will be check and will exit the
+                        // process if so
+                        randomized_indices.pop().unwrap()
+                    }),
+                    Ordering::SeqCst,
+                );
+            }
+        }
+    }
+
     fn handle_play(&self) {
         let playlist_info = Arc::clone(&self.playlist_info);
         let receiver = Arc::clone(&self.commands_receiver);
@@ -341,11 +382,11 @@ impl PlayMenu {
 
             let mut wav = Wav::default();
 
-            let mut randomized_indexes = Vec::new();
-            shuffle_vec(&mut randomized_indexes, songs_len);
+            let mut randomized_indices = Vec::new();
+            shuffle_vec(&mut randomized_indices, songs_len);
 
             let currently_index = if SETTINGS.read().playback_mode == PlaybackMode::Random {
-                randomized_indexes.pop().unwrap()
+                randomized_indices.pop().unwrap()
             } else {
                 0
             };
@@ -401,44 +442,12 @@ impl PlayMenu {
                     SongInstruction::SkipLoop => continue 'song_loop,
                 }
 
-                let setting = SETTINGS.read();
-                let len = playlist_info.read().songs.len();
-
-                // after the song been played, change the current playing song
-                // based on the playback mode choice
-                // TODO: Wrap this into a function
-                match setting.playback_mode {
-                    PlaybackMode::Sequel => {
-                        currently_playing.fetch_add(1, Ordering::SeqCst);
-                        if currently_playing.load(Ordering::SeqCst) >= len {
-                            break;
-                        }
-                    }
-                    PlaybackMode::LoopOnce => {}
-                    PlaybackMode::LoopPlaylist => {
-                        currently_playing.fetch_add(1, Ordering::SeqCst);
-
-                        if currently_playing.load(Ordering::SeqCst) >= len {
-                            currently_playing.store(0, Ordering::SeqCst);
-                        }
-                    }
-                    PlaybackMode::Random => {
-                        currently_playing.store(
-                            randomized_indexes.pop().unwrap_or_else(|| {
-                                shuffle_vec(&mut randomized_indexes, songs_len);
-
-                                // should not panic because if the playlist is
-                                // empty then it will be check and will exit the
-                                // process if so
-                                randomized_indexes.pop().unwrap()
-                            }),
-                            Ordering::SeqCst,
-                        );
-                    }
-                }
+                Self::next_song(
+                    &playlist_info.read(),
+                    &currently_playing,
+                    &mut randomized_indices,
+                )
             }
-
-            process::exit(0);
         });
     }
 
