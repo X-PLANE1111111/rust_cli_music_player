@@ -104,10 +104,9 @@ impl YTDownload {
 
         let path = PathBuf::from_str(
             format!(
-                "{}\\{}\\{}-{}.{}",
+                "{}\\{}\\{}.{}",
                 home_dir(),
                 DOWNLOADS_FOLDER,
-                title,
                 id,
                 self.audio_extension
             )
@@ -149,10 +148,10 @@ mod test {
 
     #[test]
     fn download_exit_failed() {
-        assert!(YTDownload::new(
-            "https://www.youtube.com/watch?v=Ceqr4XIqzfa".to_string()
-        )
-        .download()
-        .is_err());
+        assert!(
+            YTDownload::new("https://www.youtube.com/watch?v=Ceqr4XIqzfa".to_string())
+                .download()
+                .is_err()
+        );
     }
 }

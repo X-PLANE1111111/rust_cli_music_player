@@ -38,8 +38,7 @@ impl Add {
     fn download_from_youtube(&self) {
         let start = Instant::now();
 
-        let mut playlist_info =
-            PlaylistInfo::load_or_create(&self.playlist_name);
+        let mut playlist_info = PlaylistInfo::load_or_create(&self.playlist_name);
 
         let mut download_config = YTDownload::new(self.link.clone());
         let song = download_config.get_info().unwrap_or_else(|err| {
@@ -52,15 +51,12 @@ impl Add {
 
         let mut path = song.path_to_song.clone();
         path.pop();
-        let path =
-            format!("{}\\%(title)s-%(id)s.%(ext)s", path.to_string_lossy());
+        let path = format!("{}\\%(id)s.%(ext)s", path.to_string_lossy());
 
         download_config
             .output_path(path)
             .download()
-            .unwrap_or_else(|err| {
-                error!("Something went wrong while downloading: {}", err)
-            });
+            .unwrap_or_else(|err| error!("Something went wrong while downloading: {}", err));
 
         playlist_info.songs.push(song);
         playlist_info.save();
@@ -68,8 +64,7 @@ impl Add {
         let end = Instant::now();
 
         let mut stdout = StandardStream::stdout(ColorChoice::Always);
-        let _ = stdout
-            .set_color(ColorSpec::new().set_fg(Some(termcolor::Color::Green)));
+        let _ = stdout.set_color(ColorSpec::new().set_fg(Some(termcolor::Color::Green)));
         let _ = writeln!(
             &mut stdout,
             "Downloaded Successful! Took {} seconds",
@@ -84,11 +79,8 @@ impl Add {
             Some(s) => s,
             None => {
                 let mut stdout = StandardStream::stdout(ColorChoice::Always);
-                let _ = stdout.set_color(
-                    ColorSpec::new().set_fg(Some(termcolor::Color::Green)),
-                );
-                let _ =
-                    writeln!(&mut stdout, "error: song cannot be a directory");
+                let _ = stdout.set_color(ColorSpec::new().set_fg(Some(termcolor::Color::Green)));
+                let _ = writeln!(&mut stdout, "error: song cannot be a directory");
                 process::exit(1);
             }
         }
@@ -101,8 +93,7 @@ impl Add {
             sound_multiplier: default_sound_multiplier(),
         };
 
-        let mut playlist_info =
-            PlaylistInfo::load_or_create(&self.playlist_name);
+        let mut playlist_info = PlaylistInfo::load_or_create(&self.playlist_name);
         playlist_info.songs.push(song);
         playlist_info.save();
     }

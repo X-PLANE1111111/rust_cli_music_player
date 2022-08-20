@@ -415,6 +415,7 @@ impl PlayMenu {
                     error!("{}", e.0);
                     info!("{}", e.1);
                     pause();
+                    currently_playing.store(0, Ordering::SeqCst);
                     continue;
                 }
 
