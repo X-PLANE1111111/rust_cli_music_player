@@ -15,56 +15,18 @@ use basic_quick_lib::{cli_util::pause, io_util::input_trim};
 use colored::Colorize;
 use log::{error, info, warn};
 use parking_lot::{Mutex, RwLock};
-use rand::{prelude::SliceRandom, thread_rng};
 use soloud::{AudioExt, Handle, LoadExt, Soloud, Wav};
 
 use crate::{
     cli::data::Song,
-    util::settings::{PlaybackMode, SETTINGS},
+    util::{
+        get_index, help_print, multiplied_volume,
+        settings::{PlaybackMode, SETTINGS},
+        shuffle_vec, to_index,
+    },
 };
 
 use super::data::PlaylistInfo;
-
-fn shuffle_vec(vec: &mut Vec<usize>, target_len: usize) {
-    *vec = (0..target_len).collect();
-    vec.shuffle(&mut thread_rng());
-}
-
-#[derive(thiserror::Error, Debug)]
-enum GetIndexError {
-    #[error("Index cannot be zero!")]
-    IndexIsZero,
-
-    #[error("{0} is not a valid index!")]
-    InvalidIndex(i32),
-}
-
-/// get the index (positive or negative, but can't be zero) and
-/// return the actual index.
-/// Basically used for converting negative index
-fn get_index(index: i32, vec_len: usize) -> Result<usize, GetIndexError> {
-    use GetIndexError::*;
-
-    let vec_index = match index {
-        0 => return Err(IndexIsZero),
-        1..=i32::MAX => index - 1,
-        i32::MIN..=-1 => vec_len as i32 + index,
-    };
-
-    if vec_index.is_negative() || vec_index >= vec_len as i32 {
-        return Err(InvalidIndex(index));
-    }
-
-    Ok(vec_index as usize)
-}
-
-fn help_print(command: &str, help_msg: &str) {
-    info!("{:<20} --- {}", command, help_msg);
-}
-
-fn multiplied_volume(volume: u8, multiplier: f32) -> f32 {
-    (volume as f32 * multiplier / 100.0).clamp(0.0, 1.0)
-}
 
 #[derive(clap::Args)]
 pub struct Play {
@@ -98,6 +60,8 @@ enum Message {
     SetMultiplier(f32),
     PlayPrevious,
     PlayNext,
+    UpdateName { index: usize, new_name: String },
+    Delete(usize),
 }
 
 struct PlayMenu {
@@ -195,7 +159,7 @@ impl PlayMenu {
     }
 
     fn handle_msg(
-        message: &Message,
+        message: Message,
         sl: &mut Soloud,
         is_paused: &Cell<bool>,
         handle: Handle,
@@ -204,7 +168,7 @@ impl PlayMenu {
     ) -> SongInstruction {
         use Message::*;
 
-        match *message {
+        match message {
             Pause => {
                 is_paused.set(true);
                 sl.set_pause(handle, is_paused.get());
@@ -268,6 +232,14 @@ impl PlayMenu {
                 }
                 return SongInstruction::SkipLoop;
             }
+            UpdateName { index, new_name } => {
+                playlist_info.songs[index].song_name = new_name;
+                playlist_info.save();
+            }
+            Delete(index) => {
+                playlist_info.songs.remove(index);
+                playlist_info.save();
+            }
         }
 
         SongInstruction::None
@@ -297,7 +269,7 @@ impl PlayMenu {
             // continue playing the song
             if let Ok(message) = receiver.try_recv() {
                 let instruction = Self::handle_msg(
-                    &message,
+                    message,
                     sl,
                     is_paused,
                     handle,
@@ -455,6 +427,7 @@ impl PlayMenu {
     fn help_menu() {
         help_print("exit", "exit the program");
         help_print("help", "open help message");
+        help_print("?", "open help message");
         help_print("pause", "pause the music");
         help_print("resume", "resume the music");
         help_print("pr", "pause the music if it is playing otherwise resume");
@@ -478,6 +451,11 @@ impl PlayMenu {
             "n",
             "Play next. Wrap around the playlist if there is no next",
         );
+        help_print(
+            "edit <INDEX> <NEW_NAME>",
+            "Edit the song's name to the one you specified",
+        );
+        help_print("del <INDEX>", "Delete the song at index");
         info!("Type the index of the song to jump to the song. Example: `4` will jump to the fourth one");
         info!("    - Note that you can pass a negative value to start from the back. Example `-1` will go to the last song");
     }
@@ -538,7 +516,7 @@ impl PlayMenu {
                     info!("{}", SETTINGS.read().volume);
                     pause();
                 }
-                "help" => {
+                "help" | "?" => {
                     Self::help_menu();
                     pause();
                     try_send(Reprint);
@@ -619,10 +597,48 @@ impl PlayMenu {
                 "n" => {
                     try_send(PlayNext);
                 }
+                "edit" => {
+                    let index = match to_index(args, 0, song_len) {
+                        Ok(i) => i,
+                        Err(e) => {
+                            warn!("{}", e);
+                            pause();
+                            try_send(Reprint);
+                            continue;
+                        }
+                    };
+
+                    if args.len() < 2 {
+                        warn!("You need to put the new name. Usage: edit <INDEX> <NEW_NAME>");
+                        pause();
+                        try_send(Reprint);
+                        continue;
+                    }
+
+                    let new_name = &args[1..].join(" ");
+
+                    try_send(UpdateName {
+                        index,
+                        new_name: new_name.to_string(),
+                    });
+                }
+                "del" => {
+                    let index = match to_index(args, 0, song_len) {
+                        Ok(i) => i,
+                        Err(e) => {
+                            warn!("{}", e);
+                            pause();
+                            try_send(Reprint);
+                            continue;
+                        }
+                    };
+
+                    try_send(Delete(index));
+                }
                 num if num.parse::<i32>().is_ok() => {
                     // a really dumb thing to do and hopefully
                     // if let guard can be stabilized in the future
-                    let num = num.parse::<i32>().unwrap();
+                    let num: i32 = num.parse().unwrap();
 
                     let index = match get_index(num, song_len) {
                         Ok(index) => index,
