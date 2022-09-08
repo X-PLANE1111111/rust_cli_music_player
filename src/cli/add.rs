@@ -67,7 +67,7 @@ impl Add {
         let _ = stdout.set_color(ColorSpec::new().set_fg(Some(termcolor::Color::Green)));
         let _ = writeln!(
             &mut stdout,
-            "Downloaded Successful! Took {} seconds",
+            "Added Successful! Took {} seconds",
             (end - start).as_secs()
         );
     }

@@ -302,7 +302,6 @@ impl PlayMenu {
 
         // after the song been played, change the current playing song
         // based on the playback mode choice
-        // TODO: Wrap this into a function
         match setting.playback_mode {
             PlaybackMode::Sequel => {
                 currently_playing.fetch_add(1, Ordering::SeqCst);
@@ -343,7 +342,7 @@ impl PlayMenu {
             let songs_len = playlist_info.read().songs.len();
 
             if songs_len == 0 {
-                warn!("The playlist is empty! Use command `add <YOUTUBE_VIDEO_LINK> <PLAYLIST_NAME>` to add songs into playlist!");
+                warn!("The playlist is empty! Use command `music add <YOUTUBE_VIDEO_LINK> <PLAYLIST_NAME>` to add songs into playlist!");
                 pause();
                 process::exit(1);
             }
