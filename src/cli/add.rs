@@ -53,10 +53,10 @@ impl Add {
         path.pop();
         let path = format!("{}\\%(id)s.%(ext)s", path.to_string_lossy());
 
-        download_config
-            .output_path(path)
-            .download()
-            .unwrap_or_else(|err| error!("Something went wrong while downloading: {}", err));
+        if let Err(err) = download_config.output_path(path).download() {
+            error!("Something went wrong while downloading: {}", err);
+            return;
+        }
 
         playlist_info.songs.push(song);
         playlist_info.save();

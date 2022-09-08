@@ -53,7 +53,7 @@ impl YTDownload {
     pub fn download(&self) -> anyhow::Result<()> {
         remove_cache_dir()?;
 
-        let status = Command::new("./youtube-dl.exe")
+        let status = Command::new("youtube-dl")
             .args([
                 "-f",
                 "bestaudio/best",
@@ -134,7 +134,7 @@ impl YTDownload {
 }
 
 pub fn remove_cache_dir() -> anyhow::Result<()> {
-    Command::new("./youtube-dl.exe")
+    Command::new("youtube-dl")
         .arg("--rm-cache-dir")
         .spawn()?
         .wait()?;
