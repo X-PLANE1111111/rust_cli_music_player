@@ -6,9 +6,9 @@ use basic_quick_lib::home_dir::home_dir;
 use crate::cli::data::{default_sound_multiplier, Song};
 
 const FAILED_TO_DOWNLOAD_HELP_MESSAGE: &str = r#"
-Something went wrong while downloading. It may because of youtube-dl isn't installed. 
-Please install it and add it to environment variable.
-Go to http://ytdl-org.github.io/youtube-dl/download.html to install youtube-dl.
+Something went wrong while downloading. It may because of youtube-dl isn't downloaded. 
+Please download it and add to the same directory where this program is located.
+Go to http://ytdl-org.github.io/youtube-dl/download.html to download youtube-dl.
 "#;
 
 const DOWNLOADS_FOLDER: &str = "rust-cli-music-player_downloaded-audios";
@@ -53,7 +53,7 @@ impl YTDownload {
     pub fn download(&self) -> anyhow::Result<()> {
         remove_cache_dir()?;
 
-        let status = Command::new("youtube-dl")
+        let status = Command::new("./youtube-dl.exe")
             .args([
                 "-f",
                 "bestaudio/best",
@@ -134,7 +134,7 @@ impl YTDownload {
 }
 
 pub fn remove_cache_dir() -> anyhow::Result<()> {
-    Command::new("youtube-dl")
+    Command::new("./youtube-dl.exe")
         .arg("--rm-cache-dir")
         .spawn()?
         .wait()?;
