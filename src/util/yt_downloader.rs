@@ -5,6 +5,8 @@ use basic_quick_lib::home_dir::home_dir;
 
 use crate::cli::data::{default_sound_multiplier, Song};
 
+use super::youtube_api;
+
 const FAILED_TO_DOWNLOAD_HELP_MESSAGE: &str = r#"
 Something went wrong while downloading. It may because of youtube-dl isn't downloaded. 
 Please download it and add to the same directory where this program is located.
@@ -87,21 +89,9 @@ impl YTDownload {
 
     /// gets the video title and the video id
     pub fn get_info(&self) -> anyhow::Result<Song> {
-        let value = self.get_json()?;
-
-        let get_json_value = |index: &str| {
-            value
-                .get(index)
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| anyhow!("Failed to get {}", index))
-        };
-
-        let id = get_json_value("id")?;
-        let title = get_json_value("title")?;
-        let author = get_json_value("artist")
-            .or_else(|_| get_json_value("creator"))
-            .or_else(|_| get_json_value("channel"))?;
-
+        let json = self.get_json()?;
+        let video = &json["items"][0];
+        let id = video["id"]["videoId"].as_str().unwrap();
         let path = PathBuf::from_str(
             format!(
                 "{}\\{}\\{}.{}",
@@ -114,22 +104,17 @@ impl YTDownload {
         )?;
 
         Ok(Song {
-            author: Some(author.to_string()),
+            author: video["snippet"]["channelTitle"]
+                .as_str()
+                .map(|s| s.to_string()),
+            song_name: video["snippet"]["title"].as_str().unwrap().to_string(),
             path_to_song: path,
-            song_name: title.to_string(),
             sound_multiplier: default_sound_multiplier(),
         })
     }
 
     pub fn get_json(&self) -> anyhow::Result<serde_json::Value> {
-        let output = Command::new("youtube-dl")
-            .args(["--dump-single-json", self.link.as_str()])
-            .output()?;
-
-        let stdout = String::from_utf8_lossy(output.stdout.as_slice());
-
-        let value: serde_json::Value = serde_json::from_str(&stdout)?;
-        Ok(value)
+        youtube_api::search(&self.link, 1)
     }
 }
 
@@ -153,5 +138,21 @@ mod test {
                 .download()
                 .is_err()
         );
+    }
+
+    #[test]
+    fn get_json_test() {
+        let yt_download =
+            YTDownload::new("https://www.youtube.com/watch?v=80KXX8WbQ7k".to_string());
+        let json = yt_download.get_json().unwrap();
+        println!("{:#?}", json);
+    }
+
+    #[test]
+    fn get_info_test() {
+        let yt_download =
+            YTDownload::new("https://www.youtube.com/watch?v=80KXX8WbQ7k".to_string());
+        let song = yt_download.get_info().unwrap();
+        println!("{:#?}", song);
     }
 }

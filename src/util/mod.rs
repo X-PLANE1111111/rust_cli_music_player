@@ -1,11 +1,18 @@
-use std::{path::PathBuf, str::FromStr};
+use std::{path::PathBuf, str::FromStr, time::Instant};
 
 use anyhow::Context;
 use basic_quick_lib::home_dir::home_dir;
 use log::info;
 use rand::{seq::SliceRandom, thread_rng};
+use std::io::Write;
+use termcolor::{ColorChoice, ColorSpec, StandardStream, WriteColor};
+
+use crate::cli::data::PlaylistInfo;
+
+use self::yt_downloader::YTDownload;
 
 pub mod settings;
+pub mod youtube_api;
 pub mod yt_downloader;
 
 pub const PLAYLIST_DIR: &str = "rust-cli-music_player-playlists";
@@ -100,6 +107,36 @@ pub fn to_index(args: &[&str], index: usize, song_len: usize) -> Result<usize, T
     };
 
     Ok(index)
+}
+
+pub fn add_from_youtube_link(playlist_name: &str, link: &str) -> anyhow::Result<()> {
+    let start = Instant::now();
+
+    let mut playlist_info = PlaylistInfo::load_or_create(playlist_name);
+
+    let mut download_config = YTDownload::new(link.to_string());
+    let song = download_config.get_info()?;
+
+    let mut path = song.path_to_song.clone();
+    path.pop();
+    let path = format!("{}\\%(id)s.%(ext)s", path.to_string_lossy());
+
+    download_config.output_path(path).download()?;
+
+    playlist_info.songs.push(song);
+    playlist_info.save();
+
+    let end = Instant::now();
+
+    let mut stdout = StandardStream::stdout(ColorChoice::Always);
+    let _ = stdout.set_color(ColorSpec::new().set_fg(Some(termcolor::Color::Green)));
+    let _ = writeln!(
+        &mut stdout,
+        "Added Successful! Took {} seconds",
+        (end - start).as_secs()
+    );
+
+    Ok(())
 }
 
 #[cfg(test)]

@@ -1,14 +1,13 @@
 use std::{
     path::{Path, PathBuf},
     process,
-    time::Instant,
 };
 
 use log::error;
 use std::io::Write;
 use termcolor::{ColorChoice, ColorSpec, StandardStream, WriteColor};
 
-use crate::util::yt_downloader::YTDownload;
+use crate::util::add_from_youtube_link;
 
 use super::data::{default_sound_multiplier, PlaylistInfo, Song};
 
@@ -36,40 +35,9 @@ impl Add {
     }
 
     fn download_from_youtube(&self) {
-        let start = Instant::now();
-
-        let mut playlist_info = PlaylistInfo::load_or_create(&self.playlist_name);
-
-        let mut download_config = YTDownload::new(self.link.clone());
-        let song = download_config.get_info().unwrap_or_else(|err| {
-            error!(
-                "Something went wrong while trying to get video information! Error: {}",
-                err
-            );
-            process::exit(1);
-        });
-
-        let mut path = song.path_to_song.clone();
-        path.pop();
-        let path = format!("{}\\%(id)s.%(ext)s", path.to_string_lossy());
-
-        if let Err(err) = download_config.output_path(path).download() {
-            error!("Something went wrong while downloading: {}", err);
-            return;
-        }
-
-        playlist_info.songs.push(song);
-        playlist_info.save();
-
-        let end = Instant::now();
-
-        let mut stdout = StandardStream::stdout(ColorChoice::Always);
-        let _ = stdout.set_color(ColorSpec::new().set_fg(Some(termcolor::Color::Green)));
-        let _ = writeln!(
-            &mut stdout,
-            "Added Successful! Took {} seconds",
-            (end - start).as_secs()
-        );
+        if let Err(e) = add_from_youtube_link(&self.playlist_name, &self.link) {
+            error!("Something went wrong while downloading: {}", e);
+        };
     }
 
     fn add_local(&self) {
