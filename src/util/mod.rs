@@ -3,7 +3,9 @@ use std::{path::PathBuf, str::FromStr, time::Instant};
 use anyhow::Context;
 use basic_quick_lib::home_dir::home_dir;
 use log::info;
+use once_cell::sync::Lazy;
 use rand::{seq::SliceRandom, thread_rng};
+use regex::Regex;
 use std::io::Write;
 use termcolor::{ColorChoice, ColorSpec, StandardStream, WriteColor};
 
@@ -16,6 +18,8 @@ pub mod youtube_api;
 pub mod yt_downloader;
 
 pub const PLAYLIST_DIR: &str = "rust-cli-music_player-playlists";
+static URL_REGEX: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r".*(?:youtu.be/|v/|u/\w/|embed/|watch\?v=)([^#\&\?]*).*").unwrap());
 
 #[derive(thiserror::Error, Debug)]
 pub enum GetIndexError {
@@ -137,6 +141,13 @@ pub fn add_from_youtube_link(playlist_name: &str, link: &str) -> anyhow::Result<
     );
 
     Ok(())
+}
+
+pub fn get_id_from_youtube_link(link: &str) -> String {
+    URL_REGEX.captures(link).unwrap()[1].to_string()
+    // for cap in URL_REGEX.captures_iter(link) {
+    //     println!("{}", &cap[1]);
+    // }
 }
 
 #[cfg(test)]

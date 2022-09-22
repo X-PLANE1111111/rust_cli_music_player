@@ -24,3 +24,23 @@ pub fn search(query: &str, max_results: usize) -> anyhow::Result<serde_json::Val
         Err(anyhow!("API is currently not working"))
     }
 }
+
+pub fn get_video_info_by_id(video_id: &str) -> anyhow::Result<serde_json::Value> {
+    let query = json!({
+        "part": "snippet",
+        "key": YOUTUBE_API_KEY,
+        "id": video_id
+    });
+    let client = reqwest::blocking::Client::new();
+    let response = client
+        .get("https://www.googleapis.com/youtube/v3/videos")
+        .query(&query)
+        .send()
+        .context("Failed to send HTTP request")?;
+
+    if response.status().is_success() {
+        Ok(response.json().unwrap())
+    } else {
+        Err(anyhow!("API is currently not working"))
+    }
+}

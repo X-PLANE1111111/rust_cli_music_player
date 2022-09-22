@@ -2,8 +2,13 @@ use std::{path::PathBuf, process::Command, str::FromStr};
 
 use anyhow::{anyhow, Context};
 use basic_quick_lib::home_dir::home_dir;
+use once_cell::sync::Lazy;
+use regex::Regex;
 
-use crate::cli::data::{default_sound_multiplier, Song};
+use crate::{
+    cli::data::{default_sound_multiplier, Song},
+    util::get_id_from_youtube_link,
+};
 
 use super::youtube_api;
 
@@ -12,7 +17,6 @@ Something went wrong while downloading. It may because of youtube-dl isn't downl
 Please download it and add to the same directory where this program is located.
 Go to http://ytdl-org.github.io/youtube-dl/download.html to download youtube-dl.
 "#;
-
 const DOWNLOADS_FOLDER: &str = "rust-cli-music-player_downloaded-audios";
 
 pub struct YTDownload {
@@ -91,7 +95,7 @@ impl YTDownload {
     pub fn get_info(&self) -> anyhow::Result<Song> {
         let json = self.get_json()?;
         let video = &json["items"][0];
-        let id = video["id"]["videoId"].as_str().unwrap();
+        let id = video["id"].as_str().unwrap();
         let path = PathBuf::from_str(
             format!(
                 "{}\\{}\\{}.{}",
@@ -114,7 +118,8 @@ impl YTDownload {
     }
 
     pub fn get_json(&self) -> anyhow::Result<serde_json::Value> {
-        youtube_api::search(&self.link, 1)
+        let id = get_id_from_youtube_link(&self.link);
+        youtube_api::get_video_info_by_id(&id)
     }
 }
 

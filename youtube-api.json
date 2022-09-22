@@ -1,0 +1,82 @@
+{
+    "etag": "fGtRdUmE3k9fpUKL5h02kmcc0_o",
+    "items": [
+        {
+            "etag": "e5lhaNKsBn0K4mVZqLi2KaOihdI",
+            "id": "80KXX8WbQ7k",
+            "kind": "youtube#video",
+            "snippet": {
+                "categoryId": "10",
+                "channelId": "UCC-jQXxCAUyKA-nV-AyT1Jw",
+                "channelTitle": "Hal Leonard Orchestra",
+                "description": "To purchase print edition or for more info: https://goo.gl/uGSHuq\nTo purchase, download and print instantly: http://bit.ly/2sT3ZqM\n\nPop Specials for Strings - Grade 3-4\nColdplay's mega-hit has a prominent string orchestra as part of the its unique sound, captured perfectly in this performance version by Larry Moore. Students love to play current hits that have an orchestral sound mixed with the cutting-edge groove of one of their favorite bands.\nHL04626393\nHL04626394",
+                "liveBroadcastContent": "none",
+                "localized": {
+                    "description": "To purchase print edition or for more info: https://goo.gl/uGSHuq\nTo purchase, download and print instantly: http://bit.ly/2sT3ZqM\n\nPop Specials for Strings - Grade 3-4\nColdplay's mega-hit has a prominent string orchestra as part of the its unique sound, captured perfectly in this performance version by Larry Moore. Students love to play current hits that have an orchestral sound mixed with the cutting-edge groove of one of their favorite bands.\nHL04626393\nHL04626394",
+                    "title": "Viva la Vida arranged by Larry Moore"
+                },
+                "publishedAt": "2017-12-21T18: 31: 24Z",
+                "tags": [
+                    "String",
+                    "Orchestra",
+                    "Score",
+                    "ScorePlay",
+                    "Hal Leonard",
+                    "Alfred Music",
+                    "Belwin",
+                    "FJH",
+                    "Carl Fischer",
+                    "Kendor",
+                    "Kjos",
+                    "04626393",
+                    "Coldplay",
+                    "Jon Buckland",
+                    "Will Champion",
+                    "Chris Martin",
+                    "Guy Berryman",
+                    "Larry Moore",
+                    "December 2017",
+                    "January 2018",
+                    "February 2018",
+                    "March 2018",
+                    "April 2018",
+                    "May 2018",
+                    "June 2018"
+                ],
+                "thumbnails": {
+                    "default": {
+                        "height": 90,
+                        "url": "https: //i.ytimg.com/vi/80KXX8WbQ7k/default.jpg",
+                        "width": 120
+                    },
+                    "high": {
+                        "height": 360,
+                        "url": "https://i.ytimg.com/vi/80KXX8WbQ7k/hqdefault.jpg",
+                        "width": 480
+                    },
+                    "maxres": {
+                        "height": 720,
+                        "url": "https://i.ytimg.com/vi/80KXX8WbQ7k/maxresdefault.jpg",
+                        "width": 1280
+                    },
+                    "medium": {
+                        "height": 180,
+                        "url": "https://i.ytimg.com/vi/80KXX8WbQ7k/mqdefault.jpg",
+                        "width": 320
+                    },
+                    "standard": {
+                        "height": 480,
+                        "url": "https://i.ytimg.com/vi/80KXX8WbQ7k/sddefault.jpg",
+                        "width": 640
+                    }
+                },
+                "title": "Viva la Vida arranged by Larry Moore"
+            }
+        }
+    ],
+    "kind": "youtube#videoListResponse",
+    "pageInfo": {
+        "resultsPerPage": 1,
+        "totalResults": 1
+    }
+}
