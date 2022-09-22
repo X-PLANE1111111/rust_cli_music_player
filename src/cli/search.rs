@@ -1,8 +1,4 @@
-use std::{
-    io::{stdout, Write},
-    num::NonZeroUsize,
-    process,
-};
+use std::{num::NonZeroUsize, process};
 
 use basic_quick_lib::io_util::input_other_repeat;
 use colored::Colorize;
@@ -46,6 +42,6 @@ impl Search {
 
         let input: NonZeroUsize = input_other_repeat("Type which one to download: ");
         let selected_video = &videos[input.get() - 1];
-        let video_id = selected_video["id"]["videoId"].as_str().unwrap();
+        let _video_id = selected_video["id"]["videoId"].as_str().unwrap();
     }
 }

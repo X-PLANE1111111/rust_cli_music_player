@@ -2,8 +2,8 @@ use std::{path::PathBuf, process::Command, str::FromStr};
 
 use anyhow::{anyhow, Context};
 use basic_quick_lib::home_dir::home_dir;
-use once_cell::sync::Lazy;
-use regex::Regex;
+
+
 
 use crate::{
     cli::data::{default_sound_multiplier, Song},
