@@ -1,6 +1,7 @@
-use self::{add::Add, play::Play, search::Search, settings::ChangeSettings};
+use self::{add::Add, create::Create, play::Play, search::Search, settings::ChangeSettings};
 
 mod add;
+mod create;
 pub mod data;
 mod play;
 mod search;
@@ -20,11 +21,14 @@ pub struct Cli {
 
 impl Cli {
     pub fn handle(&mut self) {
+        use Subcommands::*;
+
         match &mut self.commands {
-            Subcommands::Play(play) => play.handle(),
-            Subcommands::Add(add) => add.handle(),
-            Subcommands::Setting(change_settings) => change_settings.handle(),
-            Subcommands::Search(search) => search.handle(),
+            Play(play) => play.handle(),
+            Add(add) => add.handle(),
+            Setting(change_settings) => change_settings.handle(),
+            Search(search) => search.handle(),
+            Create(create) => create.handle(),
         }
     }
 }
@@ -42,4 +46,7 @@ enum Subcommands {
 
     /// Search for music on youtube and download them
     Search(Search),
+
+    /// Create a new playlist
+    Create(Create),
 }

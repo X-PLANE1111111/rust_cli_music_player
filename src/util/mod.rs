@@ -42,17 +42,28 @@ pub enum ToIndexError {
     GetIndexError(GetIndexError),
 }
 
-pub fn playlist_info_path(playlist_name: &str) -> PathBuf {
+pub fn playlist_info_folder(playlist_name: &str) -> PathBuf {
     let mut path_to_json = PathBuf::from_str(home_dir().as_str())
         .with_context(|| "Failed to load home dir as path buf")
         .unwrap();
 
     path_to_json.push(PLAYLIST_DIR);
     path_to_json.push(playlist_name);
+
+    path_to_json
+}
+
+pub fn playlist_info_path(playlist_name: &str) -> PathBuf {
+    let mut path_to_json = playlist_info_folder(playlist_name);
     path_to_json.push("info");
     path_to_json.set_extension("json");
 
     path_to_json
+}
+
+pub fn create_playlist(playlist_name: &str) {
+    let playlist_info = PlaylistInfo::new(playlist_name);
+    playlist_info.save();
 }
 
 pub fn help_print(command: &str, help_msg: &str) {

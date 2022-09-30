@@ -41,6 +41,15 @@ pub struct Song {
 }
 
 impl PlaylistInfo {
+    pub fn new(playlist_name: &str) -> Self {
+        Self {
+            name: playlist_name.to_string(),
+            songs: Vec::new(),
+            created: Some(LocalTime(Local::now())),
+            folder_name: playlist_name.to_string(),
+        }
+    }
+
     pub fn load(playlist_name: &str) -> anyhow::Result<Self> {
         let path = playlist_info_path(playlist_name);
         let data = fs::read_to_string(path)?;
@@ -125,12 +134,10 @@ mod test {
             folder_name: "test".to_string(),
         };
 
-        let json_string =
-            serde_json::to_string_pretty(&info).unwrap_or_default();
+        let json_string = serde_json::to_string_pretty(&info).unwrap_or_default();
         println!("{}", json_string);
 
-        let info: PlaylistInfo =
-            serde_json::from_str(json_string.as_str()).unwrap_or_default();
+        let info: PlaylistInfo = serde_json::from_str(json_string.as_str()).unwrap_or_default();
 
         assert_eq!(info.name, "a playlist".to_string());
     }
