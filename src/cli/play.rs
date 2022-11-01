@@ -366,10 +366,8 @@ impl PlayMenu {
 
             'song_loop: loop {
                 let mut current_duration = Duration::ZERO;
-                // use a cell here because we want the `print_info` closure
-                // to be dynamically reflected and because of rust's
-                // ownership system does not allow this
-                // then cell is used instead
+                // I used cell here so that we can change the value even if it is immutably referenced
+                // inside the closure.
                 let is_paused = Cell::new(false);
 
                 Self::print_info(
