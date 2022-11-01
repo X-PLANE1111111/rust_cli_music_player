@@ -1,9 +1,12 @@
-use self::{add::Add, create::Create, play::Play, search::Search, settings::ChangeSettings};
+use self::{
+    add::Add, create::Create, play::Play, rename::Rename, search::Search, settings::ChangeSettings,
+};
 
 mod add;
 mod create;
 pub mod data;
 mod play;
+mod rename;
 mod search;
 mod settings;
 
@@ -29,6 +32,7 @@ impl Cli {
             Setting(change_settings) => change_settings.handle(),
             Search(search) => search.handle(),
             Create(create) => create.handle(),
+            Rename(rename) => rename.handle(),
         }
     }
 }
@@ -49,4 +53,7 @@ enum Subcommands {
 
     /// Create a new playlist
     Create(Create),
+
+    /// Rename a playlist
+    Rename(Rename),
 }

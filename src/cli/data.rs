@@ -13,6 +13,7 @@ pub const fn default_sound_multiplier() -> f32 {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct PlaylistInfo {
+    #[serde(skip)]
     pub name: String,
 
     #[serde(default)]
@@ -52,8 +53,13 @@ impl PlaylistInfo {
 
     pub fn load(playlist_name: &str) -> anyhow::Result<Self> {
         let path = playlist_info_path(playlist_name);
-        let data = fs::read_to_string(path)?;
+        let data = fs::read_to_string(&path)?;
         let mut this: PlaylistInfo = serde_json::from_str(&data)?;
+
+        let paths = path.iter().collect::<Vec<_>>();
+        let name = paths[paths.len() - 2].to_str().unwrap();
+
+        this.name = name.to_string();
         this.folder_name = playlist_name.to_string();
 
         Ok(this)
