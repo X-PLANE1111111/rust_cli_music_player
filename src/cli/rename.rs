@@ -19,8 +19,6 @@ impl Rename {
         let path = playlist_info_folder(&self.playlist_name);
         let new_path = playlist_info_folder(&self.new_name);
 
-        println!("path: {:?}, new_path: {:?}", path, new_path);
-
         if let Err(e) = fs::rename(&path, &new_path) {
             error!("Failed to rename! Error: {e}");
             return;
