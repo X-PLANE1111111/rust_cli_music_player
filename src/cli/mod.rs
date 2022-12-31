@@ -2,6 +2,7 @@ use self::{
     add::Add, create::Create, delete::Delete, play::Play, rename::Rename, search::Search,
     settings::ChangeSettings,
 };
+use clap::Parser;
 
 mod add;
 mod create;
@@ -12,7 +13,7 @@ mod rename;
 mod search;
 mod settings;
 
-#[derive(clap::Parser)]
+#[derive(Parser)]
 #[clap(
     author,
     version,

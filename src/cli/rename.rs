@@ -1,7 +1,6 @@
 use std::fs;
 
 use clap::Args;
-use log::{error, info};
 
 use crate::util::playlist_info_folder;
 
@@ -19,11 +18,11 @@ impl Rename {
         let path = playlist_info_folder(&self.playlist_name);
         let new_path = playlist_info_folder(&self.new_name);
 
-        if let Err(e) = fs::rename(&path, &new_path) {
-            error!("Failed to rename! Error: {e}");
+        if let Err(e) = fs::rename(path, new_path) {
+            println!("Failed to rename! Error: {e}");
             return;
         }
 
-        info!("Renamed successful!");
+        println!("Renamed successful!");
     }
 }

@@ -12,15 +12,14 @@ use std::{
 
 use anyhow::Context;
 use basic_quick_lib::{cli_util::pause, io_util::input_trim};
-use colored::Colorize;
-use log::{error, info, warn};
 use parking_lot::{Mutex, RwLock};
 use soloud::{AudioExt, Handle, LoadExt, Soloud, Wav};
+use termcolor::ColorSpec;
 
 use crate::{
     cli::data::Song,
     util::{
-        get_index, help_print, multiplied_volume,
+        colored, get_index, help_print, multiplied_volume,
         settings::{PlaybackMode, SETTINGS},
         shuffle_vec, to_index,
     },
@@ -38,7 +37,7 @@ impl Play {
         let playlist_info = match PlaylistInfo::load(&self.playlist_name) {
             Ok(v) => v,
             Err(err) => {
-                error!(
+                println!(
                     r#"Failed to load playlist "{}"! Error: {}"#,
                     self.playlist_name, err
                 );
@@ -113,8 +112,8 @@ impl PlayMenu {
         // just ignore it if failed to clear
         let _ = clearscreen::clear();
 
-        info!("Playlist: {}", playlist_info.name);
-        info!(
+        println!("Playlist: {}", playlist_info.name);
+        println!(
             "Created at {}",
             playlist_info
                 .created
@@ -131,15 +130,16 @@ impl PlayMenu {
             let text = format!("{}. {}", index + 1, song.song_name);
 
             if is_current {
-                info!("-> {}", text.bold())
+                print!("-> ");
+                colored::writeln(ColorSpec::new().set_bold(true), &text);
             } else {
-                info!("   {}", text)
+                println!("   {}", text)
             }
         }
 
         if is_paused {
             println!();
-            info!("Paused");
+            println!("Paused");
         }
     }
 
@@ -342,7 +342,7 @@ impl PlayMenu {
             let songs_len = playlist_info.read().songs.len();
 
             if songs_len == 0 {
-                warn!("The playlist is empty! Use command `music add <YOUTUBE_VIDEO_LINK> <PLAYLIST_NAME>` to add songs into playlist!");
+                println!("The playlist is empty! Use command `music add <YOUTUBE_VIDEO_LINK> <PLAYLIST_NAME>` to add songs into playlist!");
                 pause();
                 process::exit(1);
             }
@@ -381,8 +381,8 @@ impl PlayMenu {
                     currently_playing.load(Ordering::SeqCst),
                     &mut wav,
                 ) {
-                    error!("{}", e.0);
-                    info!("{}", e.1);
+                    println!("{}", e.0);
+                    println!("{}", e.1);
                     pause();
                     currently_playing.store(0, Ordering::SeqCst);
                     continue;
@@ -453,8 +453,8 @@ impl PlayMenu {
             "Edit the song's name to the one you specified",
         );
         help_print("del <INDEX>", "Delete the song at index");
-        info!("Type the index of the song to jump to the song. Example: `4` will jump to the fourth one");
-        info!("    - Note that you can pass a negative value to start from the back. Example `-1` will go to the last song");
+        println!("Type the index of the song to jump to the song. Example: `4` will jump to the fourth one");
+        println!("    - Note that you can pass a negative value to start from the back. Example `-1` will go to the last song");
     }
 
     fn handle_input(&self) {
@@ -466,7 +466,7 @@ impl PlayMenu {
 
         let try_send = |message: Message| {
             self.commands_sender.send(message).unwrap_or_else(|err| {
-                error!("Something went wrong while sending the command to the music playing thread! This command will not do anything! Error: {}", err);
+                println!("Something went wrong while sending the command to the music playing thread! This command will not do anything! Error: {}", err);
             });
         };
 
@@ -487,7 +487,7 @@ impl PlayMenu {
             match command {
                 "setv" => {
                     if args.is_empty() {
-                        warn!("usage: setv <VOLUME>");
+                        println!("usage: setv <VOLUME>");
                         pause();
                         continue;
                     }
@@ -495,14 +495,14 @@ impl PlayMenu {
                     let volume = match args[0].trim().parse::<u64>() {
                         Ok(v) => v,
                         Err(err) => {
-                            warn!("Failed to parse {}. Err: {}", args[0].trim(), err);
+                            println!("Failed to parse {}. Err: {}", args[0].trim(), err);
                             pause();
                             continue;
                         }
                     };
 
                     if volume > 100 {
-                        warn!("Volume must be in between 0 and 100!");
+                        println!("Volume must be in between 0 and 100!");
                         pause();
                         continue;
                     }
@@ -510,7 +510,7 @@ impl PlayMenu {
                     try_send(SetVolume(volume as u8));
                 }
                 "getv" => {
-                    info!("{}", SETTINGS.read().volume);
+                    println!("{}", SETTINGS.read().volume);
                     pause();
                 }
                 "help" | "?" => {
@@ -523,7 +523,7 @@ impl PlayMenu {
                 "pr" => try_send(PauseOrResume),
                 "setp" => {
                     if args.is_empty() {
-                        warn!("Playback mode can be: random, looponce, loopplaylist, sequel (It is not case sensitive)");
+                        println!("Playback mode can be: random, looponce, loopplaylist, sequel (It is not case sensitive)");
                         pause();
                         continue;
                     }
@@ -531,7 +531,7 @@ impl PlayMenu {
                     let playback_mode = match PlaybackMode::from_str(args[0]) {
                         Ok(v) => v,
                         Err(_) => {
-                            warn!("Invalid playback mode! Valid ones are: random, looponce, loopplaylist, sequel");
+                            println!("Invalid playback mode! Valid ones are: random, looponce, loopplaylist, sequel");
                             pause();
                             continue;
                         }
@@ -540,23 +540,23 @@ impl PlayMenu {
                     let mut settings = SETTINGS.write();
                     settings.playback_mode = playback_mode;
                     settings.save().unwrap_or_else(|err| {
-                        warn!("Failed to save the settings! This means the playback mode did not change and it will be lost next time you open this program! (Error: {})", err);
+                        println!("Failed to save the settings! This means the playback mode did not change and it will be lost next time you open this program! (Error: {})", err);
                         pause();
                     });
 
-                    info!(
+                    println!(
                         "Successfully set playback mode to {}!",
                         settings.playback_mode
                     );
                     pause();
                 }
                 "getp" => {
-                    info!("{}", SETTINGS.read().playback_mode);
+                    println!("{}", SETTINGS.read().playback_mode);
                     pause();
                 }
                 "setmp" => {
                     if args.is_empty() {
-                        warn!("No multiplier value is given. The multiplier is used to multiply current volume, and it must be a non-negative real number");
+                        println!("No multiplier value is given. The multiplier is used to multiply current volume, and it must be a non-negative real number");
                         pause();
                         continue;
                     }
@@ -564,7 +564,7 @@ impl PlayMenu {
                     let multiplier = match args[0].trim().parse::<f32>() {
                         Ok(v) => {
                             if v < 0.0 {
-                                warn!("It must be a non-negative real number");
+                                println!("It must be a non-negative real number");
                                 pause();
                                 continue;
                             }
@@ -572,7 +572,7 @@ impl PlayMenu {
                             v
                         }
                         Err(_) => {
-                            warn!("Not a valid number!");
+                            println!("Not a valid number!");
                             pause();
                             continue;
                         }
@@ -581,7 +581,7 @@ impl PlayMenu {
                     try_send(SetMultiplier(multiplier));
                 }
                 "getmp" => {
-                    info!(
+                    println!(
                         "Volume multiplier for current song is {}",
                         songs.read().songs[current_playing_index.load(Ordering::SeqCst)]
                             .sound_multiplier
@@ -598,7 +598,7 @@ impl PlayMenu {
                     let index = match to_index(args, 0, song_len) {
                         Ok(i) => i,
                         Err(e) => {
-                            warn!("{}", e);
+                            println!("{}", e);
                             pause();
                             try_send(Reprint);
                             continue;
@@ -606,7 +606,7 @@ impl PlayMenu {
                     };
 
                     if args.len() < 2 {
-                        warn!("You need to put the new name. Usage: edit <INDEX> <NEW_NAME>");
+                        println!("You need to put the new name. Usage: edit <INDEX> <NEW_NAME>");
                         pause();
                         try_send(Reprint);
                         continue;
@@ -623,7 +623,7 @@ impl PlayMenu {
                     let index = match to_index(args, 0, song_len) {
                         Ok(i) => i,
                         Err(e) => {
-                            warn!("{}", e);
+                            println!("{}", e);
                             pause();
                             try_send(Reprint);
                             continue;
@@ -640,7 +640,7 @@ impl PlayMenu {
                     let index = match get_index(num, song_len) {
                         Ok(index) => index,
                         Err(e) => {
-                            error!("{}", e);
+                            println!("{}", e);
                             pause();
                             try_send(Reprint);
                             continue;
@@ -651,7 +651,7 @@ impl PlayMenu {
                 }
                 "exit" => return,
                 _ => {
-                    warn!(
+                    println!(
                         "Unknown Command `{}`! Type in `help` for more information!",
                         input
                     );

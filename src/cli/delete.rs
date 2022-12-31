@@ -1,7 +1,6 @@
 use std::fs;
 
 use clap::Args;
-use log::{error, info};
 
 use crate::util::playlist_info_folder;
 
@@ -15,11 +14,11 @@ impl Delete {
     pub fn handle(&self) {
         let folder_path = playlist_info_folder(&self.playlist_name);
 
-        if let Err(e) = fs::remove_dir_all(&folder_path) {
-            error!("Failed to remove playlist! Error: {}", e);
+        if let Err(e) = fs::remove_dir_all(folder_path) {
+            println!("Failed to remove playlist! Error: {}", e);
             return;
         }
 
-        info!("Removed playlist successfully!");
+        println!("Removed playlist successfully!");
     }
 }

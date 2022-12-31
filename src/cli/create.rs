@@ -1,5 +1,4 @@
 use clap::Args;
-use log::info;
 
 use crate::util::create_playlist;
 
@@ -12,6 +11,6 @@ pub struct Create {
 impl Create {
     pub fn handle(&self) {
         create_playlist(&self.playlist_name);
-        info!("Created successfully");
+        println!("Created successfully!");
     }
 }

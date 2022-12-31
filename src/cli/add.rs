@@ -3,7 +3,6 @@ use std::{
     process,
 };
 
-use log::error;
 use std::io::Write;
 use termcolor::{ColorChoice, ColorSpec, StandardStream, WriteColor};
 
@@ -36,7 +35,7 @@ impl Add {
 
     fn download_from_youtube(&self) {
         if let Err(e) = add_from_youtube_link(&self.playlist_name, &self.link) {
-            error!("Something went wrong while downloading: {}", e);
+            println!("Something went wrong while downloading: {}", e);
         };
     }
 

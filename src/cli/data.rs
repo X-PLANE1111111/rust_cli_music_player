@@ -2,7 +2,6 @@ use std::{fs, path::PathBuf, process};
 
 use basic_quick_lib::{io_util::input_trim, time::LocalTime};
 use chrono::Local;
-use log::{error, info};
 use serde::{Deserialize, Serialize};
 
 use crate::util::playlist_info_path;
@@ -79,11 +78,11 @@ impl PlaylistInfo {
         match PlaylistInfo::load(playlist_name) {
             Ok(v) => v,
             Err(err) => {
-                error!(
+                println!(
                     "Failed to find playlist \"{}\"! Error: {}",
                     playlist_name, err
                 );
-                info!("Do you want to create a playlist instead? (y/N): ");
+                println!("Do you want to create a playlist instead? (y/N): ");
 
                 let input = input_trim("");
                 if input.to_lowercase() == "y" {

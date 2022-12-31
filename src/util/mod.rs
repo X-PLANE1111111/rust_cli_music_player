@@ -2,7 +2,6 @@ use std::{path::PathBuf, str::FromStr, time::Instant};
 
 use anyhow::Context;
 use basic_quick_lib::home_dir::home_dir;
-use log::info;
 use once_cell::sync::Lazy;
 use rand::{seq::SliceRandom, thread_rng};
 use regex::Regex;
@@ -13,6 +12,7 @@ use crate::cli::data::PlaylistInfo;
 
 use self::yt_downloader::YTDownload;
 
+pub mod colored;
 pub mod settings;
 pub mod youtube_api;
 pub mod yt_downloader;
@@ -20,6 +20,13 @@ pub mod yt_downloader;
 pub const PLAYLIST_DIR: &str = "rust-cli-music_player-playlists";
 static URL_REGEX: Lazy<Regex> =
     Lazy::new(|| Regex::new(r".*(?:youtu.be/|v/|u/\w/|embed/|watch\?v=)([^#\&\?]*).*").unwrap());
+
+const CORRESPONDING_ENTITY_TEXT: [(&str, &str); 4] = [
+    ("&amp;", "&"),
+    ("&lt;", "<"),
+    ("&gt;", ">"),
+    ("&quot;", "\""),
+];
 
 #[derive(thiserror::Error, Debug)]
 pub enum GetIndexError {
@@ -67,7 +74,7 @@ pub fn create_playlist(playlist_name: &str) {
 }
 
 pub fn help_print(command: &str, help_msg: &str) {
-    info!("{:<30} --- {}", command, help_msg);
+    println!("{:<30} --- {}", command, help_msg);
 }
 
 pub fn multiplied_volume(volume: u8, multiplier: f32) -> f32 {
@@ -159,6 +166,16 @@ pub fn get_id_from_youtube_link(link: &str) -> String {
     // for cap in URL_REGEX.captures_iter(link) {
     //     println!("{}", &cap[1]);
     // }
+}
+
+pub fn decode_html_entities(str: &str) -> String {
+    let mut str = String::from(str);
+
+    for (entity, text) in CORRESPONDING_ENTITY_TEXT.iter() {
+        str = str.replace(entity, text);
+    }
+
+    str
 }
 
 #[cfg(test)]
