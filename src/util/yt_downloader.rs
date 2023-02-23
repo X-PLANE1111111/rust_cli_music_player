@@ -3,8 +3,6 @@ use std::{path::PathBuf, process::Command, str::FromStr};
 use anyhow::{anyhow, Context};
 use basic_quick_lib::home_dir::home_dir;
 
-
-
 use crate::{
     cli::data::{default_sound_multiplier, Song},
     util::get_id_from_youtube_link,
@@ -59,7 +57,7 @@ impl YTDownload {
     pub fn download(&self) -> anyhow::Result<()> {
         remove_cache_dir()?;
 
-        let status = Command::new("youtube-dl")
+        let status = Command::new("yt-dlp")
             .args([
                 "-f",
                 "bestaudio/best",
