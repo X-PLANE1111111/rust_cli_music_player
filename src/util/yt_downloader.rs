@@ -122,7 +122,7 @@ impl YTDownload {
 }
 
 pub fn remove_cache_dir() -> anyhow::Result<()> {
-    Command::new("youtube-dl")
+    Command::new("yt-dlp")
         .arg("--rm-cache-dir")
         .spawn()?
         .wait()?;
