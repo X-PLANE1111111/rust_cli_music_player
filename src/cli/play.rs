@@ -70,6 +70,14 @@ struct PlayMenu {
     currently_playing_index: Arc<AtomicUsize>,
 }
 
+/// A struct that represents all the info necessary for song playing
+struct PlayingInfo {
+    currently_playing: Arc<AtomicUsize>,
+    is_paused: Cell<bool>,
+    randomized_indices: Vec<usize>,
+    current_duration: Duration,
+}
+
 impl PlayMenu {
     fn new(playlist_info: PlaylistInfo) -> Self {
         let channel = mpsc::channel::<Message>();
@@ -89,14 +97,14 @@ impl PlayMenu {
 
     fn init_song(
         playlist_info: &PlaylistInfo,
-        currently_playing: usize,
         wav: &mut Wav,
+        playing_info: &PlayingInfo,
     ) -> Result<(), (String, String)> {
         let Song {
             song_name,
             path_to_song,
             ..
-        } = &playlist_info.songs[currently_playing];
+        } = &playlist_info.songs[playing_info.currently_playing.load(Ordering::SeqCst)];
 
         wav.load(path_to_song)
             .map_err(|e| (
@@ -108,7 +116,7 @@ impl PlayMenu {
             ))
     }
 
-    fn print_info(playlist_info: &PlaylistInfo, current_index: usize, is_paused: bool) {
+    fn print_info(playlist_info: &PlaylistInfo, playing_info: &PlayingInfo) {
         // just ignore it if failed to clear
         let _ = clearscreen::clear();
 
@@ -125,7 +133,7 @@ impl PlayMenu {
         println!();
 
         for (index, song) in playlist_info.songs.iter().enumerate() {
-            let is_current = index == current_index;
+            let is_current = index == playing_info.currently_playing.load(Ordering::SeqCst);
 
             let text = format!("{}. {}", index + 1, song.song_name);
 
@@ -137,7 +145,7 @@ impl PlayMenu {
             }
         }
 
-        if is_paused {
+        if playing_info.is_paused.get() {
             println!();
             println!("Paused");
         }
@@ -147,13 +155,14 @@ impl PlayMenu {
         sl: &mut Soloud,
         handle: Handle,
         playlist_info: &PlaylistInfo,
-        currently_playing: usize,
+        playing_info: &PlayingInfo,
     ) {
         sl.set_volume(
             handle,
             multiplied_volume(
                 SETTINGS.read().volume,
-                playlist_info.songs[currently_playing].sound_multiplier,
+                playlist_info.songs[playing_info.currently_playing.load(Ordering::SeqCst)]
+                    .sound_multiplier,
             ),
         );
     }
@@ -161,12 +170,20 @@ impl PlayMenu {
     fn handle_msg(
         message: Message,
         sl: &mut Soloud,
-        is_paused: &Cell<bool>,
+        // is_paused: &Cell<bool>,
         handle: Handle,
-        currently_playing: &AtomicUsize,
+        // currently_playing: &AtomicUsize,
         playlist_info: &mut PlaylistInfo,
+        // randomized_indices: &mut Vec<usize>,
+        playing_info: &mut PlayingInfo,
     ) -> SongInstruction {
         use Message::*;
+
+        let PlayingInfo {
+            is_paused,
+            currently_playing,
+            ..
+        } = playing_info;
 
         match message {
             Pause => {
@@ -185,7 +202,9 @@ impl PlayMenu {
             // feels stupid
             Reprint => {}
             IndexJump(index) => {
-                currently_playing.store(index, Ordering::SeqCst);
+                playing_info
+                    .currently_playing
+                    .store(index, Ordering::SeqCst);
                 return SongInstruction::SkipLoop;
             }
             SetVolume(new_volume) => {
@@ -195,12 +214,7 @@ impl PlayMenu {
                     setting.save().unwrap_or_default();
                 }
 
-                Self::update_volume(
-                    sl,
-                    handle,
-                    playlist_info,
-                    currently_playing.load(Ordering::SeqCst),
-                );
+                Self::update_volume(sl, handle, playlist_info, playing_info);
             }
             SetMultiplier(new_mul) => {
                 {
@@ -209,12 +223,7 @@ impl PlayMenu {
                     playlist_info.save();
                 };
 
-                Self::update_volume(
-                    sl,
-                    handle,
-                    playlist_info,
-                    currently_playing.load(Ordering::SeqCst),
-                );
+                Self::update_volume(sl, handle, playlist_info, playing_info);
             }
             PlayPrevious => {
                 if currently_playing.load(Ordering::SeqCst) == 0 {
@@ -239,6 +248,10 @@ impl PlayMenu {
             Delete(index) => {
                 playlist_info.songs.remove(index);
                 playlist_info.save();
+                shuffle_vec(
+                    &mut playing_info.randomized_indices,
+                    playlist_info.songs.len(),
+                );
             }
         }
 
@@ -249,10 +262,8 @@ impl PlayMenu {
         sl: &mut Soloud,
         handle: Handle,
         receiver: &mpsc::Receiver<Message>,
-        is_paused: &Cell<bool>,
-        current_duration: &mut Duration,
         playlist_info: &RwLock<PlaylistInfo>,
-        currently_playing: &AtomicUsize,
+        playing_info: &mut PlayingInfo,
     ) -> SongInstruction {
         const SLEEP_DURATION: Duration = Duration::from_millis(10);
 
@@ -261,8 +272,8 @@ impl PlayMenu {
             // power
             thread::sleep(SLEEP_DURATION);
 
-            if !is_paused.get() {
-                *current_duration += SLEEP_DURATION;
+            if !playing_info.is_paused.get() {
+                playing_info.current_duration += SLEEP_DURATION;
             }
 
             // try to recv to see if there is any command, or else
@@ -271,21 +282,16 @@ impl PlayMenu {
                 let instruction = Self::handle_msg(
                     message,
                     sl,
-                    is_paused,
                     handle,
-                    currently_playing,
                     &mut playlist_info.write(),
+                    playing_info,
                 );
 
                 if instruction != SongInstruction::None {
                     return instruction;
                 }
 
-                Self::print_info(
-                    &playlist_info.read(),
-                    currently_playing.load(Ordering::SeqCst),
-                    is_paused.get(),
-                );
+                Self::print_info(&playlist_info.read(), playing_info);
             }
         }
 
@@ -294,11 +300,18 @@ impl PlayMenu {
 
     fn next_song(
         playlist_info: &PlaylistInfo,
-        currently_playing: &AtomicUsize,
-        randomized_indices: &mut Vec<usize>,
+        // currently_playing: &AtomicUsize,
+        // randomized_indices: &mut Vec<usize>,
+        playing_info: &mut PlayingInfo,
     ) {
         let setting = SETTINGS.read();
         let len = playlist_info.songs.len();
+
+        let PlayingInfo {
+            currently_playing,
+            randomized_indices,
+            ..
+        } = playing_info;
 
         // after the song been played, change the current playing song
         // based on the playback mode choice
@@ -356,35 +369,34 @@ impl PlayMenu {
             let mut randomized_indices = Vec::new();
             shuffle_vec(&mut randomized_indices, songs_len);
 
-            let currently_index = if SETTINGS.read().playback_mode == PlaybackMode::Random {
+            let current_index = if SETTINGS.read().playback_mode == PlaybackMode::Random {
                 randomized_indices.pop().unwrap()
             } else {
                 0
             };
 
-            currently_playing.store(currently_index, Ordering::SeqCst);
+            currently_playing.store(current_index, Ordering::SeqCst);
+
+            let current_duration = Duration::ZERO;
+            // I used cell here so that we can change the value even if it is immutably referenced
+            // inside the closure.
+            let is_paused = Cell::new(false);
+
+            let mut playing_info = PlayingInfo {
+                currently_playing,
+                is_paused,
+                randomized_indices,
+                current_duration,
+            };
 
             'song_loop: loop {
-                let mut current_duration = Duration::ZERO;
-                // I used cell here so that we can change the value even if it is immutably referenced
-                // inside the closure.
-                let is_paused = Cell::new(false);
+                Self::print_info(&playlist_info.read(), &playing_info);
 
-                Self::print_info(
-                    &playlist_info.read(),
-                    currently_playing.load(Ordering::SeqCst),
-                    is_paused.get(),
-                );
-
-                if let Err(e) = Self::init_song(
-                    &playlist_info.read(),
-                    currently_playing.load(Ordering::SeqCst),
-                    &mut wav,
-                ) {
+                if let Err(e) = Self::init_song(&playlist_info.read(), &mut wav, &playing_info) {
                     println!("{}", e.0);
                     println!("{}", e.1);
                     pause();
-                    currently_playing.store(0, Ordering::SeqCst);
+                    playing_info.currently_playing.store(0, Ordering::SeqCst);
                     continue;
                 }
 
@@ -394,17 +406,16 @@ impl PlayMenu {
                     &mut sl,
                     handle,
                     &playlist_info.read(),
-                    currently_playing.load(Ordering::SeqCst),
+                    // currently_playing.load(Ordering::SeqCst),
+                    &playing_info,
                 );
 
                 let instruction = Self::recv_cmd(
                     &mut sl,
                     handle,
                     &receiver.lock(),
-                    &is_paused,
-                    &mut current_duration,
                     &playlist_info,
-                    currently_playing.as_ref(),
+                    &mut playing_info,
                 );
 
                 match instruction {
@@ -412,11 +423,7 @@ impl PlayMenu {
                     SongInstruction::SkipLoop => continue 'song_loop,
                 }
 
-                Self::next_song(
-                    &playlist_info.read(),
-                    &currently_playing,
-                    &mut randomized_indices,
-                )
+                Self::next_song(&playlist_info.read(), &mut playing_info)
             }
         });
     }
